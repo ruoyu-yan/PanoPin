@@ -32,3 +32,29 @@ env the solver ends up needing.
 ## D7 — Method route is OPEN (2026-07-08)
 Feature matching with the thesis extractors is one documented option, not a mandate; the agent
 researches and chooses. **Why:** user's explicit instruction — avoid premature commitment.
+
+## D8 — Decider = appearance/content (CPO render-and-compare), not shape (2026-07-08)
+Room selection is decided by spatially-resolved color-consistency (CPO), not room shape/geometry.
+**Why:** shape/line geometry cannot disambiguate rooms of identical shape — the exact case PanoPin
+exists to solve and where the thesis' jigsaw fails; the Area_3 EDA confirmed ~7 identical-shape pairs.
+Content (posters, furniture, windows), carried in the candidate clouds' RGB, is the discriminating
+signal; global color is degenerate but per-bearing appearance matching is not. Supersedes the
+short-lived geometry-first proposal. See `specs/2026-07-08-coarse-pano-to-room-options.md`.
+
+## D9 — Build upon CPO by composing its primitives (2026-07-08)
+Reuse CPO from `82magnolia/panoramic-localization` (Apache-2.0) by calling its building-block functions
+(`color_utils`, `utils`, `sampling_loss`, `data_utils`) from our own orchestrator that RETURNS
+`(t, R, loss)`; do not fork/patch its entry point (`localize_single.localize` returns `None`).
+**Why:** minimal, self-contained, reproducible; avoids maintaining a fork; the primitives are the
+validated core. Cost for room ranking = min `refine_pose_sampling_loss` loss.
+
+## D10 — Dedicated `panopin` CPU env (2026-07-08)
+New conda env: python 3.8, torch 1.10 (CPU), numpy~1.23, opencv, pandas, scipy, scikit-learn, Pillow;
+drop tensorflow-cpu / open3d / pylsd-nova / einops. **Why:** CPO needs torch (CPU ok, training-free);
+a fresh env keeps PanoPin self-contained and reproducible (matches the parent project's fresh-env
+pattern), rather than coupling to the thesis' `scan_env` with its unspecified torch.
+
+## D11 — Two-tier funnel for CPU tractability (2026-07-08)
+Rank all candidate rooms by a cheap spatial score (coarse histogram/score-map, no Adam), then run CPO's
+Adam refinement only on the top-k rooms. **Why:** full CPO per room (score-maps + 6×100 Adam) across
+~21 rooms on CPU is expensive; the cheap rank preserves same-shape candidates while bounding refine cost.

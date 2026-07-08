@@ -3,14 +3,29 @@
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
 ## Current state (2026-07-08)
-- **Scaffold + evaluation harness created and verified on real S3DIS Area_3. Method design NOT
-  started — no solver exists yet.**
-- The loop runs end-to-end: `make_manifest` → baseline → `score`. **Random baseline = 5.9% room
-  accuracy** (5/85; chance = 1/23 ≈ 4.3%). That is the floor to beat.
-- Next: **T1** (survey approaches) → **T2** (brainstorm + design spec) → **T3** (first solver that
-  beats random). See `docs/tasks.json`.
+- **T1 (survey) + T2 (design) DONE. Method decided: coarse room-selection by CPO render-and-compare
+  (appearance/content matching), building upon CPO from `82magnolia/panoramic-localization`
+  (Apache-2.0, same repo as FGPL). No solver code yet — implementation (T3) is next, gated on the
+  design-spec review.**
+- Harness verified: random baseline = 5.9% room accuracy (5/85; chance ≈ 4.3%) — the floor to beat.
+- Specs (branch `feat/coarse-room-cpo`): `docs/specs/2026-07-08-coarse-pano-to-room-options.md` (T1),
+  `docs/specs/2026-07-08-render-compare-cpo-design.md` (T2). Decisions D8–D11 added.
+- Next: user reviews the design spec → `superpowers:writing-plans` → **M0** smoke (vendor CPO + build
+  `panopin` env, reproduce CPO on 1 room) → **M1/T3** (two-tier room selector beats baseline).
 
 ## Session log
+
+### 2026-07-08 — T1 survey + T2 design (render-and-compare / CPO)
+- Cloned the GitHub repo into the local PanoPin dir and pushed the skeleton (branch `main`).
+- Ran the session ritual; T1 survey via 3 research agents + a deep-research run: the pano→colored-cloud
+  line is PICCOLO/CPO/LDL/FGPL (`82magnolia`, Apache-2.0, all training-free, benchmarked on Stanford2D3D).
+- Area_3 EDA: geometry is separable *on Area_3* but reproduces the thesis' same-shape blind spot; global
+  color is degenerate → chose spatially-resolved appearance matching (CPO), demoting shape.
+- User rejected shape matching (== the thesis) → confirmed render-and-compare; user approved building upon CPO.
+- Code recon of CPO: CPU-feasible, training-free, `read_txt_pcd` matches our `X Y Z R G B` clouds exactly,
+  room score = min `refine_pose_sampling_loss` loss; a two-tier funnel is needed for CPU cost. Wrote the
+  options note + design spec; added decisions D8–D11.
+- **STOPPED:** awaiting user review of the design spec before `writing-plans` / implementation.
 
 ### 2026-07-08 — project setup (setup session — done by the parent Scan2BIM session, not the PanoPin agent)
 - Spun PanoPin out of the Feyzullah meeting (see Point_360 `roadmap.md` §"Scope update — 2026-07-08").

@@ -12,9 +12,10 @@
     {
       "id": "T1",
       "title": "Survey candidate coarse pano->room registration approaches (>=3 routes, tradeoffs)",
-      "status": "todo",
-      "passes": false,
-      "verify": "docs/specs/ contains a dated options note comparing >=3 deterministic-leaning routes with pros/cons and a recommendation"
+      "status": "done",
+      "passes": true,
+      "verify": "docs/specs/ contains a dated options note comparing >=3 deterministic-leaning routes with pros/cons and a recommendation",
+      "notes": "docs/specs/2026-07-08-coarse-pano-to-room-options.md (committed 532f612): 5 routes compared; chose render-and-compare / CPO"
     },
     {
       "id": "T2",
