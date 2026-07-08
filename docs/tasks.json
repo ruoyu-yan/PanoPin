@@ -1,0 +1,48 @@
+{
+  "_comment": "Machine-readable backlog. Flip 'passes' to true ONLY after 'verify' runs green. Keep it truthful; the agent reads this every session.",
+  "tasks": [
+    {
+      "id": "T0",
+      "title": "Project scaffold + evaluation harness (verified on Area_3)",
+      "status": "done",
+      "passes": true,
+      "verify": "python tests/test_harness.py && python eval/score.py --predictions runs/random_room.json --area Area_3",
+      "notes": "setup session 2026-07-08; random baseline = 5.9% room accuracy"
+    },
+    {
+      "id": "T1",
+      "title": "Survey candidate coarse pano->room registration approaches (>=3 routes, tradeoffs)",
+      "status": "todo",
+      "passes": false,
+      "verify": "docs/specs/ contains a dated options note comparing >=3 deterministic-leaning routes with pros/cons and a recommendation"
+    },
+    {
+      "id": "T2",
+      "title": "Brainstorm + write the method design spec",
+      "status": "todo",
+      "passes": false,
+      "verify": "a committed docs/specs/YYYY-MM-DD-<topic>-design.md exists, produced via superpowers:brainstorming"
+    },
+    {
+      "id": "T3",
+      "title": "Implement solver v0 that beats the random baseline on room accuracy",
+      "status": "todo",
+      "passes": false,
+      "verify": "python eval/score.py --predictions runs/<solver>.json --area Area_3  ->  room accuracy >> 0.06"
+    },
+    {
+      "id": "T4",
+      "title": "Add coarse pose seed + define the FGPL hand-off",
+      "status": "todo",
+      "passes": false,
+      "verify": "predictions include coarse_pose; score.py reports translation/rotation error; hand-off to FGPL documented in docs/"
+    },
+    {
+      "id": "T5",
+      "title": "Robustness pass: all 85 Area_3 panos, log failures, tune",
+      "status": "todo",
+      "passes": false,
+      "verify": "a report over all 85 panos in runs/; failure cases noted in docs/PROGRESS.md"
+    }
+  ]
+}

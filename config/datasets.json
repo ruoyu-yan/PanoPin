@@ -1,0 +1,13 @@
+{
+  "_comment": "Dataset locations for the PanoPin harness. Repoint here if data moves. GT = small JSONs (fast even on /mnt/d); room clouds are on fast ext4.",
+  "s3dis": {
+    "Area_3": {
+      "pano_pose_dir": "/mnt/d/Python Workplace/Master_Thesis/scan2measure-webframework/data/area_3/pano/pose",
+      "pano_rgb_dir": "/mnt/d/Python Workplace/Master_Thesis/scan2measure-webframework/data/area_3/pano/rgb",
+      "camera_to_room": "/mnt/d/Python Workplace/Master_Thesis/scan2measure-webframework/data/area_3/3d/camera_to_room.json",
+      "rooms_dir": "/home/ruoyu/Point_360/data/s3dis/Stanford3dDataset_v1.2/Area_3",
+      "room_cloud_glob": "{room}/{room}.txt",
+      "notes": "Room name in pano filename / pose JSON / camera_to_room.json is GT -> do NOT expose to solvers (see eval/make_manifest.py). Original S3DIS cloud <-> pano/pose frame = identity (~5mm), per Point_360. rooms_dir has 23 rooms; 21 have panos (hallway_5, storage_2 have none). pointcloud.mat is v7.3 HDF5 (slow on /mnt/d)."
+    }
+  }
+}

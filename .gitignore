@@ -1,0 +1,16 @@
+# datasets — never commit (large; live outside the repo, see config/datasets.json)
+/data/
+
+# harness run outputs (predictions, reports, manifests, symlinks)
+/runs/
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.ipynb_checkpoints/
+
+# os / wsl cruft
+.DS_Store
+*Zone.Identifier
