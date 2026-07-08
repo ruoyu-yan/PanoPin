@@ -2,18 +2,33 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
-## Current state (2026-07-08)
-- **T1 (survey) + T2 (design) DONE. Method decided: coarse room-selection by CPO render-and-compare
-  (appearance/content matching), building upon CPO from `82magnolia/panoramic-localization`
-  (Apache-2.0, same repo as FGPL). No solver code yet — implementation (T3) is next, gated on the
-  design-spec review.**
-- Harness verified: random baseline = 5.9% room accuracy (5/85; chance ≈ 4.3%) — the floor to beat.
-- Specs (branch `feat/coarse-room-cpo`): `docs/specs/2026-07-08-coarse-pano-to-room-options.md` (T1),
-  `docs/specs/2026-07-08-render-compare-cpo-design.md` (T2). Decisions D8–D11 added.
-- Next: user reviews the design spec → `superpowers:writing-plans` → **M0** smoke (vendor CPO + build
-  `panopin` env, reproduce CPO on 1 room) → **M1/T3** (two-tier room selector beats baseline).
+## Current state (2026-07-09)
+- **Design + plan DONE & approved. Implementation (subagent-driven) IN PROGRESS: plan Tasks 1–3 of 7
+  complete on branch `feat/coarse-room-cpo`. RESUME AT plan Task 4 (M0 real-data smoke).**
+- Built: vendored CPO (Apache-2.0) + `panopin` conda env (py3.8, torch 1.10 CPU); `cpo_config.py`
+  (`load_cfg` + `TIER1`/`TIER2`); `cpo_adapter.localize_pair(cfg, pano, cloud) -> (t, R, loss)` composing
+  CPO primitives (reviewed-correct); synthetic fixtures. Solver CLI NOT built yet (that's Task 6).
+- **TOP OPEN RISK (D13):** the synthetic discrimination test is `xfail` — CPO can't localize flat
+  synthetic boxes (self-match loss ~0.22), so "content disambiguates same-shape rooms" is UNVALIDATED.
+  First thing next session = **Task 4 M0 smoke on REAL Area_3 data**: does CPO localize a real pano to
+  its real room (low loss, near-GT pose)? If the margin is inadequate on the ~7 identical pairs, revisit
+  the method before Task 7.
+- Harness floor unchanged: random baseline = 5.9% room accuracy — the number to beat (Task 7 / project T3).
+- Plan: `docs/plans/2026-07-08-coarse-room-cpo-v0.md` (7 tasks). SDD ledger: `.superpowers/sdd/progress.md`
+  (says Tasks 1–3 done). To resume: `superpowers:subagent-driven-development` → start Task 4.
 
 ## Session log
+
+### 2026-07-08/09 — implementation session: v0 plan + subagent-driven Tasks 1–3
+- Wrote the v0 implementation plan (`docs/plans/2026-07-08-coarse-room-cpo-v0.md`, 7 tasks) and executed
+  it subagent-driven (fresh implementer + reviewer per task, ledger at `.superpowers/sdd/progress.md`).
+- **Task 1** vendor CPO + `panopin` env — done (needed a D12 doc fix: open3d couldn't be dropped).
+- **Task 2** `cpo_config` (load_cfg + TIER1/TIER2) — done, review Approved.
+- **Task 3** `localize_pair` + synthetic fixtures — core reviewed-correct and committed. Its synthetic
+  discrimination test proved UNRELIABLE (CPO can't localize flat boxes; wrong room won across 4 configs
+  + match_color on/off) → marked `xfail`; real validation deferred to Task 4. See **D13**. ~1h spent
+  diagnosing; payoff = the D13 insight (rotational-alignment failure mode + fixture-fidelity limit).
+- **STOPPED** for the day at plan Task 3 done. Resume at Task 4 (M0 real-data smoke). Nothing pushed to GitHub.
 
 ### 2026-07-08 — T1 survey + T2 design (render-and-compare / CPO)
 - Cloned the GitHub repo into the local PanoPin dir and pushed the skeleton (branch `main`).

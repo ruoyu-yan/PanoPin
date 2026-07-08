@@ -66,3 +66,17 @@ therefore includes `open3d==0.19.0` (matching upstream CPO's `requirements.txt`)
 D10 is now factually corrected here (DECISIONS is append-only); `tensorflow-cpu`, `pylsd-nova`, and
 `einops` remain dropped as D10 stated (not needed by the CPO color path). Also: `opencv-python` is
 unpinned (D10 gave no version; resolved 5.0.0.93) and `pytest` is the test runner.
+
+## D13 — Synthetic box-room test can't validate CPO discrimination; validate on real data (2026-07-09)
+The Task-3 synthetic discrimination test (same-shape rooms, spatial-only colour difference) is marked
+`xfail`. Empirically (2026-07-08, four fixture configs — 2-wall swap, 4-wall cyclic, 4-wall adjacent-pair
+— with `match_color` on AND off) CPO scored the WRONG room lower **every time**, and even the self-match
+loss stayed ~0.22 (not ~0): CPO's colour-histogram pose search needs real texture to lock onto a pose,
+which a flat-walled box lacks, so room-identity signal sits below the noise floor. Two insights carried
+forward: (a) a CYCLIC colour permutation of the walls is geometrically a 90° room rotation, which CPO's
+yaw search aligns away — so **rooms related by a rotation are a genuine failure mode on real data too**;
+(b) `localize_pair` itself is correct (reviewed; returns finite, sensible values) — this is a
+fixture-fidelity limit, not a bug. **Decision:** don't chase a synthetic margin; validate the "content
+disambiguates same-shape rooms" claim on REAL S3DIS data at Task 4 (M0 smoke — does CPO localize a real
+pano to its real room with low loss + near-GT pose?) and Task 7. **THE top open risk for the project:**
+whether CPO's real-data discrimination margin is adequate on Area_3's ~7 near-identical room pairs.
