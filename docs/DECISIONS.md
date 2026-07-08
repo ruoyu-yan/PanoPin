@@ -58,3 +58,11 @@ pattern), rather than coupling to the thesis' `scan_env` with its unspecified to
 Rank all candidate rooms by a cheap spatial score (coarse histogram/score-map, no Adam), then run CPO's
 Adam refinement only on the top-k rooms. **Why:** full CPO per room (score-maps + 6×100 Adam) across
 ~21 rooms on CPU is expensive; the cheap rank preserves same-shape candidates while bounding refine cost.
+
+## D12 — `open3d` cannot be dropped from the `panopin` env (2026-07-08) — corrects D10
+D10 assumed `open3d` could be dropped; it cannot. The vendored `third_party/cpo/data_utils.py` imports
+`open3d` at module load (line 12), so importing any CPO primitive requires it. The `panopin` env
+therefore includes `open3d==0.19.0` (matching upstream CPO's `requirements.txt`). **Why recorded:**
+D10 is now factually corrected here (DECISIONS is append-only); `tensorflow-cpu`, `pylsd-nova`, and
+`einops` remain dropped as D10 stated (not needed by the CPO color path). Also: `opencv-python` is
+unpinned (D10 gave no version; resolved 5.0.0.93) and `pytest` is the test runner.
