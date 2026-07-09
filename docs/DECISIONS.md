@@ -141,3 +141,14 @@ out-of-frame panos are fixed (recover a per-room offset) or excluded/flagged. **
 the harness now (charter #5); document it, report Task-7 accuracy split as in-frame (76) vs all (85), and
 leave a per-room frame-offset fix as an open investigation. This partly explains why the thesis' jigsaw
 needed a manual per-pano checkpoint.
+
+**Follow-up (2026-07-09, prompted by user): are these cameras off the WHOLE cloud or just their room
+segment?** `smoke/check_out_of_frame_panos.py` tested each of the 9 against ALL Area_3 room bboxes:
+**8/9 fall outside EVERY room's bbox** (nearest room = their OWN labeled room, 0.7–2.0 m away — several at
+normal ~1.4 m camera height but beyond the room walls); **1/9** (an office_2 pano) sits inside hallway_2's
+bbox (a doorway/boundary case). So for the 8 it is genuinely "camera off the mapped point cloud" — the
+user's point: expected, unmatchable, NOT a method failure; the sensible label is still their own room
+(it's the nearest), so this reads as a GT pose error or clipped room segment, not a mislabel. **Reframe:**
+these 9 are a coverage/GT fact, not a "blocker" — exclude-and-report-separately is the right handling
+(the office_2/hallway_2 boundary pano is the only arguably-recoverable one). The METHOD's job is only the
+76 in-frame panos.
