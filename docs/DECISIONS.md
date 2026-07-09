@@ -263,3 +263,22 @@ panos where they're a MINORITY — but not window-DOMINATED ones. (b) The own-ro
 mis-assign them — hand FGPL only the confident seeds (~2/3), flag the rest for manual/other handling. This
 fits the coarse-seed role honestly (never feed FGPL a confidently-wrong room). n=12 sample; the ~1/3 rate
 should be validated on more panos.
+
+## D24 — CORRECTION: D22/D23 calibration numbers leaked GT; fair calibration = minmax, gate is a tradeoff (2026-07-09)
+The D22/D23 "percentile calibration -> recall@1 58%, clean 7/7 confidence separation" used a baseline that
+excluded rows BY TRUE ROOM LABEL — a **ground-truth leak**. It asymmetrically excluded the scored pano only
+for its OWN room (pushing that room's percentile to 0) while including it for wrong rooms — manufacturing the
+separation. A real solver has no GT (D5), so this is invalid. Re-ran the sweep FAIRLY (leave-one-out on the
+scored pano only; smoke/analyze_calibration.py rewritten):
+- **percentile fairly = 4/12 (33%) — no better than raw.** Its apparent win was entirely the leak.
+- **minmax is the fair winner: recall@1 7/12 (58%) vs raw 4/12 (33%)** (zscore 6/12). minmax normalizes each
+  room's loss to its own leave-one-out [min,max]; a genuine match sits at/below the room's min -> score <=0.
+- **Confidence gate is NOT clean (D23's 100%/58% was the same leak).** Fair minmax winner-scores: CORRECT
+  [-1.66..-0.14] vs WRONG [-0.30..+0.29] — they OVERLAP ~[-0.3,-0.14]. It's a precision/coverage tradeoff:
+  threshold -0.3 -> 4/4 (100%) at 33% coverage; -0.19 -> 6/7 (86%) at 58%. It DOES reliably flag the D23
+  hard-fail (self-localization-failure) panos, which score high/positive.
+**Honest v1 (n=12, whole-area):** minmax calibration, overall recall@1 = 58%; confident subset 100% precision
+at 33% coverage (tunable). Modest and NOISY (n=12) — validate on more panos. **D23's core observation stands**
+(hard-fail panos fail to self-localize, own-room loss ~0.25, window/occlusion cause) — that used raw own-room
+losses, no leak; only the calibration/confidence NUMBERS in D22/D23 were inflated. Implemented in
+src/panopin/calibrate.py (minmax + gate); scored via smoke/score_v1.py; unit-tested tests/test_calibrate.py.
