@@ -20,13 +20,12 @@ def test_score_room_cheap_shapes_and_finite(tmp_path):
 
 def test_cheap_scorer_skips_inlier_detection(tmp_path, monkeypatch):
     # score_room_cheap must NOT call the expensive make_score_map_* functions.
-    import utils
     from panopin.cpo_config import load_cfg
     from panopin.cpo_adapter import score_room_cheap
     def boom(*a, **k):
         raise AssertionError("inlier detection must not run in Tier-1")
-    monkeypatch.setattr(utils, "make_score_map_2d", boom)
-    monkeypatch.setattr(utils, "make_score_map_3d", boom)
+    monkeypatch.setattr("panopin.cpo_adapter.make_score_map_2d", boom)
+    monkeypatch.setattr("panopin.cpo_adapter.make_score_map_3d", boom)
     pano, cloud = _prep(tmp_path)
     cfg = load_cfg(sample_rate=1, num_yaw=4, num_pitch=4, num_roll=4, num_trans=10)
     score_room_cheap(cfg, pano, cloud)   # must not raise
