@@ -80,3 +80,55 @@ fixture-fidelity limit, not a bug. **Decision:** don't chase a synthetic margin;
 disambiguates same-shape rooms" claim on REAL S3DIS data at Task 4 (M0 smoke — does CPO localize a real
 pano to its real room with low loss + near-GT pose?) and Task 7. **THE top open risk for the project:**
 whether CPO's real-data discrimination margin is adequate on Area_3's ~7 near-identical room pairs.
+
+## D14 — D13 validated on real in-frame data: CPO self-localizes AND discriminates (2026-07-09)
+Task 4 M0 + discrimination probes on real Area_3 data (`smoke/reproduce_cpo_one_room.py`,
+`smoke/discriminate_one_pano.py`) resolve the D13 core claim **for in-frame panos**:
+- **Self-localization:** the office_3 pano localizes to its office_3 cloud at **0.039 m** (also
+  0.086/0.135 m across reruns) — centimetre-level, frame identity confirmed. What the flat synthetic
+  box couldn't do, real texture does.
+- **Discrimination:** office_3 pano vs {office_1,2,6,9, hallway_1} → correct room wins, loss **0.1185
+  vs 0.21–0.26**, runner-up margin **+0.089 (+75%)**, and it is the ONLY room with a correct recovered
+  pose (0.095 m vs 5–17 m). Content, not shape, picks the right room among near-identical offices.
+- **A no-match floor exists:** when CPO can't lock on, loss floors ~0.16–0.26 (matches the D13 flat-box
+  ~0.22). A genuine match breaks well below (~0.12). This hints at a natural match/no-match threshold,
+  usable later for confidence / FGPL hand-off.
+**Caveat (determinism):** CPO is NOT bit-reproducible on CPU even with `np.random.seed` — torch score-map
+scatter / Adam vary run-to-run (~±0.02 loss, cm-level pose). Full determinism (D1) is a deferred polish
+item. **Caveat (n):** clean in-frame discrimination confirmed on office_3 (and see D17 for why office_9
+was NOT a valid method test). Broader confirmation = Task 7 (all in-frame panos).
+
+## D15 — Task-5 test strategy: mock the funnel logic, validate discrimination on real data (2026-07-09)
+The plan's Task-5 acceptance test reused the synthetic same-shape box fixture, which D13 proved CPO
+cannot pass. **Decision:** split the two concerns. (a) The funnel *control flow* (rank all rooms cheap →
+refine only top-k → return min-loss) is unit-tested in `tests/test_select_room.py` by MOCKING
+`localize_pair` — deterministic, data-free, always runs. (b) *Real discrimination* is validated
+end-to-end on real Area_3 rooms via `smoke/select_room_real.py`. **Why:** never gate CI on a test whose
+premise is known-false; keep the honest validation where it belongs (real data). Supersedes the plan's
+Task-5 Step-1 synthetic test (a callout was added to the plan).
+
+## D16 — Two-tier funnel is correct but not yet cheap; Tier-1 needs a lighter scorer (2026-07-09)
+Measured: with stock CPO cfg the per-room cost is dominated by the fixed inlier score-map detection
+(make_score_map_2d/3d over ~9360 inlier poses, **~20 s/room on CPU at sample_rate=30**, ~scales with
+point count), which runs in BOTH tiers. `num_iter`/`top_k_candidate` add little on top. So the D11 funnel
+(Tier-1 cheap rank → Tier-2 refine top-k) currently saves only the small refine cost, NOT the bulk. Full
+Area_3 (85 panos × 21 rooms) at ~20 s/pair ≈ **~10 h** — an overnight job as-is. **Decision:** keep the
+funnel (correct, and the structure is right) but flag that Task 7 tractability needs a genuinely light
+Tier-1 scorer (skip inlier detection; small pose pool / histogram-only) before scaling. Do NOT prematurely
+optimize; get the accuracy signal first, then make Tier-1 cheap. Tracked for Task 7.
+
+## D17 — 9/85 Area_3 panos are OUT OF FRAME (camera outside its room cloud) (2026-07-09)
+`smoke/check_frame_alignment.py` checked every pano's GT `camera_location` against its room cloud's bbox:
+**76/85 (89%) are inside (max offset 0.000 m — identity holds); 9 panos across 4 rooms are OUTSIDE** —
+lounge_2 (2.04 m), office_10 (1.54 m), office_9 (0.87 m), office_2 (0.68 m). CPO seeds candidate
+translations from the cloud's quantile extent, so a camera outside the cloud **can never be localized**
+(office_9 self-error 5.8 m even at full budget top_k=6/num_iter=100 — the failure that first flagged this).
+Offsets are sub-metre-to-2 m and partly axis-aligned (office_9 sits inside on Y, just outside on X/Z),
+consistent with a small pose↔cloud misalignment or a clipped room cloud — NOT a wrong-room mislabel.
+**Implications:** (a) the pose-error metric is meaningless for these 9; (b) room-assignment likely fails
+for them (no low-loss match anywhere — probe #2 office_9 confirmed a wrong room won by noise); (c) this
+is a DATA/GT limitation, not a CPO method failure, and it **caps achievable accuracy at ~89%** unless the
+out-of-frame panos are fixed (recover a per-room offset) or excluded/flagged. **Decision:** do NOT edit
+the harness now (charter #5); document it, report Task-7 accuracy split as in-frame (76) vs all (85), and
+leave a per-room frame-offset fix as an open investigation. This partly explains why the thesis' jigsaw
+needed a manual per-pano checkpoint.
