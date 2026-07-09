@@ -1,6 +1,7 @@
 def test_pin_sets_single_thread_and_seeds():
     import torch, numpy as np
     from panopin.determinism import pin
+    torch.set_num_threads(4)
     pin(0)
     assert torch.get_num_threads() == 1
     a = np.random.rand(3)
