@@ -93,10 +93,19 @@ Task 4 M0 + discrimination probes on real Area_3 data (`smoke/reproduce_cpo_one_
 - **A no-match floor exists:** when CPO can't lock on, loss floors ~0.16–0.26 (matches the D13 flat-box
   ~0.22). A genuine match breaks well below (~0.12). This hints at a natural match/no-match threshold,
   usable later for confidence / FGPL hand-off.
-**Caveat (determinism):** CPO is NOT bit-reproducible on CPU even with `np.random.seed` — torch score-map
-scatter / Adam vary run-to-run (~±0.02 loss, cm-level pose). Full determinism (D1) is a deferred polish
-item. **Caveat (n):** clean in-frame discrimination confirmed on office_3 (and see D17 for why office_9
-was NOT a valid method test). Broader confirmation = Task 7 (all in-frame panos).
+**Caveat (n=2, margin is pano-dependent):** a second in-frame query, office_5 vs {office_1,4,7,8,
+hallway_2}, PASSES but by only **+0.0056 loss (+3.5%)** over runner-up hallway_2 — office_5 self-
+localizes cleanly (0.058 m) but its correct-room loss (0.161) sits near the no-match floor and hallway_2
+coincidentally scored 0.167. So across n=2 in-frame: office_3 robust (+75%), office_5 within-noise
+(+3.5%). **The method works but the discrimination margin varies a lot per pano; thin-margin panos are
+not reliable** under the nondeterminism below.
+**Caveat (determinism — now correctness-relevant, not just polish):** CPO is NOT bit-reproducible on CPU
+even with `np.random.seed` — torch score-map scatter / Adam vary run-to-run (~±0.02 loss). Since some
+correct rooms win by <0.02 (office_5), this noise **can flip the selected room**. Fixing determinism
+(torch.manual_seed / use_deterministic_algorithms) and/or using full CPO settings (top_k=6, num_iter=100
+→ more converged, lower correct-room loss → wider margin) is now a Task-7 priority, not a deferred item.
+**Broader confirmation = Task 7** (all 76 in-frame panos); the split of robust vs thin-margin vs
+out-of-frame panos will set the achievable accuracy.
 
 ## D15 — Task-5 test strategy: mock the funnel logic, validate discrimination on real data (2026-07-09)
 The plan's Task-5 acceptance test reused the synthetic same-shape box fixture, which D13 proved CPO
