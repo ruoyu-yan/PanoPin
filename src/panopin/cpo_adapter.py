@@ -9,7 +9,7 @@ from color_utils import color_match, color_mod
 from utils import (out_of_room, generate_trans_points, generate_rot_points,
                    make_score_map_2d, process_score_map_2d, make_score_map_3d,
                    histogram_pose_search)
-from cpo.sampling_loss import refine_pose_sampling_loss
+from cpo.sampling_loss import refine_pose_sampling_loss, sampling_loss
 
 
 def localize_pair(cfg, pano_path, cloud_path):
@@ -85,3 +85,41 @@ def localize_pair(cfg, pano_path, cloud_path):
         R = result[min_ind, 1].detach().numpy().reshape(3, 3)
         loss = float(result[min_ind, 2].detach())
     return t, R, loss
+
+
+def score_room_cheap(cfg, pano_path, cloud_path):
+    """Cheap Tier-1 room score: small-pool histogram_pose_search (no inlier score
+    maps) -> single-forward sampling_loss. Returns (t, R, loss); no Adam. CPU-only."""
+    device = torch.device('cpu')
+    sample_rate = getattr(cfg, 'sample_rate', 1)
+
+    xyz_np, rgb_np = data_utils.read_txt_pcd(cloud_path, sample_rate=sample_rate)
+    xyz = torch.from_numpy(xyz_np).float().to(device)
+    rgb = torch.from_numpy(rgb_np).float().to(device)
+
+    orig_img = cv2.cvtColor(cv2.imread(pano_path), cv2.COLOR_BGR2RGB)
+    orig_img = cv2.resize(orig_img, (2048, 1024))
+    if getattr(cfg, 'match_color', False):
+        mod_img = (torch.from_numpy(orig_img).float() / 255.).to(device)
+        new_img = color_match(mod_img, rgb)
+        orig_img = (255 * new_img.cpu().numpy()).astype(np.uint8)
+
+    init_dict = get_init_dict_cpo(cfg)
+    rot = generate_rot_points(init_dict, device=device)
+    trans = generate_trans_points(xyz, init_dict, device=device)
+
+    idh = getattr(cfg, 'init_downsample_h', 1); idw = getattr(cfg, 'init_downsample_w', 1)
+    img_search = cv2.resize(orig_img, (orig_img.shape[1] // idw, orig_img.shape[0] // idh))
+    img_search = (torch.from_numpy(img_search).float() / 255.).to(device)
+    input_trans, input_rot = histogram_pose_search(
+        img_search, xyz, rgb, trans, rot, 1,
+        init_dict['num_split_h'], init_dict['num_split_w'], None, init_dict['sin_hist'])
+
+    mdh = getattr(cfg, 'main_downsample_h', 1); mdw = getattr(cfg, 'main_downsample_w', 1)
+    img_score = cv2.resize(orig_img, (orig_img.shape[1] // mdw, orig_img.shape[0] // mdh))
+    img_score = (torch.from_numpy(img_score).float() / 255.).to(device)
+    t_c, R_c, loss_c = sampling_loss(img_score, xyz, rgb, input_trans, input_rot, 0, cfg,
+                                     return_list=True)
+    t = t_c.detach().numpy().reshape(3)
+    R = R_c.detach().numpy().reshape(3, 3)
+    return t, R, float(loss_c.detach())
