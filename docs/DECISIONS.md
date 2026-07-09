@@ -226,3 +226,21 @@ the list; (b) THE promising lever = **per-room loss CALIBRATION** (subtract each
 before ranking) to demote the loss-sinks — cheap (re-ranks losses already computed), should lift recall@1 AND
 clean the shortlist. **Recommendation:** test calibration before building B's plumbing. Needs the full
 pano×room loss matrix (this run printed only top-8/pano) — re-run capturing all 23 losses per pano.
+
+## D22 — Percentile calibration ~doubles recall@1 (33%→58%); ~1/3 of panos are hard-unmatchable (2026-07-09)
+Tested per-room loss calibration on a 12-pano × 23-room loss matrix (full localize_pair on panopin-gpu,
+saved to runs/calib_matrix.json; formula sweep in smoke/analyze_calibration.py — instant, no GPU).
+Recall@1/3/5 over 12 in-frame query panos:
+- **raw:** 4/12 (33%) / 5/12 / 8/12 (67%).
+- **sub_median** (subtract each room's median baseline): 6/12 / 6/12 / **6/12** — lifts @1 but WRECKS the WCs
+  (WC_1 5→16, WC_2 5→13): the WCs are themselves loss-sinks (low baseline), so subtraction demotes the true
+  room too. Net @5 DROPS to 50%.
+- **percentile** (WINNER): for each candidate room, score = fraction of OTHER panos whose loss to that room is
+  <= this pano's loss (scale/spread-free). **recall@1 7/12 (58%), @3 7/12, @5 8/12 (67%)** — nearly doubles
+  @1 vs raw AND keeps @5 (fixes office_5/WC_2/conf→1, rescues office_7 21→4, doesn't wreck the WCs). z-score
+  and minmax also reach 7/12 @1 but lose @5.
+**Adopt percentile calibration in the solver.** Caveat: it needs a reference set of panos per building to build
+each room's loss distribution (bootstrap for a fixed scene). **Hard ceiling:** recall@5 stays ~67% even
+calibrated — office_8 (rank ~19-23 every formula) and storage_1 are genuine CPO color-match FAILURES (true room
+not in top-5 at all), so ~1/3 of panos (n=12 sample) are unrescuable by calibration OR a shortlist. This caps
+B's shortlist coverage. n=12 is small — validate on more in-frame panos. Matrix cached in runs/ for re-analysis.
