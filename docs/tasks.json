@@ -28,9 +28,10 @@
     {
       "id": "T3",
       "title": "Implement solver v0 that beats the random baseline on room accuracy",
-      "status": "todo",
+      "status": "in_progress",
       "passes": false,
-      "verify": "python eval/score.py --predictions runs/<solver>.json --area Area_3  ->  room accuracy >> 0.06"
+      "verify": "python eval/score.py --predictions runs/<solver>.json --area Area_3  ->  room accuracy >> 0.06",
+      "notes": "Method DEMONSTRATED to beat baseline (5.9%): recall@1=14/18 (78%) on 3x3-room prototype sets vs their own segments, and office_3 rank 1/23 vs whole Area_3 (smoke/prototype_sets_timing.py, smoke/tier1_recall_full.py). NOT yet formally scored through eval/score.py (the cheap-Tier-1 solver was abandoned D18-D20; the working 'solver' is the full localize_pair on panopin-gpu, ~25 s/room). To formally close T3: wire manifest->predictions with full localize_pair and run score.py. Speed: whole-area is ~7 min/pano (~9-18 h full eval); prototype (3-5 rooms) ~1-2 min/pano."
     },
     {
       "id": "T4",
