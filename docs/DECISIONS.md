@@ -152,3 +152,23 @@ user's point: expected, unmatchable, NOT a method failure; the sensible label is
 these 9 are a coverage/GT fact, not a "blocker" — exclude-and-report-separately is the right handling
 (the office_2/hallway_2 boundary pano is the only arguably-recoverable one). The METHOD's job is only the
 76 in-frame panos.
+
+## D18 — Cheap Tier-1 refuted by the recall gate; full CPO pipeline is required (2026-07-09)
+The cheap-Tier-1 optimization (spec 2026-07-09-cheap-tier1-design) FAILED its validation gate (plan
+Task 3). Measured on real Area_3, ranking each of several in-frame panos against all 21 rooms:
+- `score_room_cheap` (small-pool histogram_pose_search + single-forward `sampling_loss`, NO inlier score
+  maps, NO Adam): **recall@5 = 0/5**, 1.4 s/room. Degenerate — tiny/corridor clouds (hallway_5/6, WC) win;
+  the true room ranks 7–21. The recon's "uniform weights give a clean cross-room loss" is EMPIRICALLY
+  FALSE: unweighted mean colour residual favours small/low-coverage clouds.
+- reduced-inlier `localize_pair` (4/4/4 pool, light Adam): **recall@5 = 1/3**, 3.3 s/room. Shrinking the
+  pool also loses discrimination.
+- FULL `localize_pair` (full inlier detection + top_k=6/num_iter=100), office_3 vs all 21 rooms:
+  **rank 1**, loss 0.081 vs runner-up hallway_6 0.124 (**+53% margin**), 41 s/room. The method DOES
+  recall against the full room set — but only with the expensive inlier weighting AND Adam refine, which
+  together suppress the degenerate-small-cloud loss floor (~0.12–0.15).
+**Conclusion:** there is NO cheap shortcut that preserves discrimination; the ~20 s inlier detection and
+the Adam refine are both load-bearing. A full 76-pano in-frame eval is ~9–18 h. Plan 2 is HALTED at Task 3.
+**Options going forward:** (a) accept the cost, run the full pipeline overnight for the real number;
+(b) research a coverage-normalized cheap scorer to remove the small-cloud bias (uncertain); (c) treat the
+method as correct-but-slow, document the office_3 rank-1/21 evidence, defer speed to future work.
+Diagnostics: smoke/tier1_recall*.py.
