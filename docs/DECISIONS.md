@@ -172,3 +172,24 @@ the Adam refine are both load-bearing. A full 76-pano in-frame eval is ~9–18 h
 (b) research a coverage-normalized cheap scorer to remove the small-cloud bias (uncertain); (c) treat the
 method as correct-but-slow, document the office_3 rank-1/21 evidence, defer speed to future work.
 Diagnostics: smoke/tier1_recall*.py.
+
+## D19 — "Fix the speed": no cheap algorithmic path; the real fix is GPU (needs a modern env) (2026-07-09)
+Per D18 the cheap Tier-1 failed. User chose "fix the speed (research)". Findings:
+- Adam-no-inlier scorer (skip ~20 s inlier detection, keep unweighted Adam refine): recall@5 = 2/3, 18 s/room
+  (smoke/exp_adam_scorer.py). Adam helps (0/5 → 2/3) but inlier weighting still needed for clean recall.
+- COVERAGE de-bias REFUTED (smoke/exp_coverage.py): the degenerate hallway/WC winners are NOT low-coverage;
+  true rooms have HIGH coverage (0.84–0.93) comparable to the winners, and loss/coverage ranks the true room
+  WORSE. So it is not a size/coverage artifact.
+- ROOT CAUSE: at the coarse (histogram-search) pose the TRUE room's residual is genuinely HIGH (0.38–0.47),
+  worse than corridors/hallways (0.24–0.30) whose repetitive texture matches many poses; the true room's low
+  loss only emerges AFTER Adam refines the pose. => **discrimination REQUIRES per-room Adam pose refinement;
+  there is no cheap coarse proxy.** This is intrinsic to CPO colour-matching on this data.
+- SPEED FIX = GPU, not algorithm. CPO is GPU-native; `panopin` is CPU-only (D10). Machine has an RTX 4060
+  (8 GB, Ada sm_89). Tried `scan_env` (torch 1.12.1+cu116, cuda True, has all CPO deps once torch_scatter was
+  added) → **segfault**: cu116 predates Ada, its CUDA kernels crash on sm_89. (torch_scatter reverted from
+  scan_env afterward.) **A working GPU run needs a fresh env: torch 2.x / cu118+ + matching torch_scatter +
+  CPO deps (open3d, opencv, pandas, sklearn).** CPO's torch-1.10 code likely needs only minor tweaks for torch 2.x.
+**Decision/OPTIONS for next session:** (a) build a modern-GPU env and run the CORRECT full pipeline on the
+4060 (~40–60 min for 76×21, the real accuracy number); (b) accept a ~10–18 h CPU overnight run; (c) stop with
+the finding of record (method works — office_3 rank 1/21 +53% — but is CPU-bound). Plan-2 (cheap Tier-1) is
+ABANDONED; score_room_cheap / determinism helper remain as artifacts but are not the path.
