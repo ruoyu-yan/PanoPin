@@ -57,7 +57,15 @@ _Newest first. Update at the END of every session: what changed, what's next, wh
 - **Prototype timing (user request):** clarified units (~25 s is per ROOM, not per pano; assign = ×N
   candidate rooms). Ran 3 sets of 3 rooms, each pano vs its set's 3 segments on GPU: ~8 min/set (~75–86 s/
   pano), **recall@1 = 14/18 (78%)**. Misses = same-shape offices + WC_1 loss-sink.
-- **STOPPED** here. Housekeeping done; NEXT = T4 (FGPL hand-off scope). Nothing pushed to GitHub.
+- **T4 scoped** (`docs/specs/2026-07-09-fgpl-handoff-scope.md`): FGPL needs {top-1 room, ~3 m 2D position};
+  chose option B (shortlist + FGPL top-k). **Whole-area sizing (D21):** raw recall@1 collapses to ~17–33%
+  (loss-sink rooms dominate). **Calibration (D22→D24):** fair minmax → recall@1 58%; confidence gate is a
+  precision/coverage tradeoff. **Caught + fixed a GT LEAK (D24)** in my own calibration analysis (the earlier
+  "clean 100%/58%" was invalid). **Diagnosed the hard floor (D23):** ~1/3 panos fail to self-localize
+  (window/occlusion). **v1 committed:** `src/panopin/calibrate.py` + tests + `smoke/score_v1.py`.
+- **STOPPED for the day at v1.** Handover written (`docs/HANDOVER.md`). Ceiling-push branch
+  `feat/robust-loss-ceiling` created (empty, ready). Two open threads: robust-loss ceiling-push; v1→solve.py
+  wiring + validate beyond n=12. Nothing pushed to GitHub.
 
 ### 2026-07-09 (later) — Task 4 (M0) + Task 5 (funnel) + the out-of-frame discovery
 - **Task 4 (M0), committed b579efe.** Frame pre-checked cheaply (office_3 camera inside cloud bbox, Z≈1.4 m,
