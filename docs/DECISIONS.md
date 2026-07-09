@@ -209,3 +209,20 @@ RTX 4060 (Ada). One-pano timing, full `localize_pair`, office_3 vs all 21 rooms:
 score-map + refine loops (batch the pose pool as tensor ops) — real dev work on vendored code — or a lighter
 method for the coarse-seed role. Hardware alone is not the fix. `panopin-gpu` env kept (works; ~2x faster;
 useful if the loops are later vectorised). Smoke: smoke/exp_reduced_inlier_gpu.py, smoke/tier1_recall_full.py.
+
+## D21 — Whole-area recall@1 collapses to ~17%; a FIXED set of "loss-sink" rooms dominates → calibrate (2026-07-09)
+Sizing run for the FGPL top-k hand-off (B): full localize_pair, 6 in-frame panos vs ALL 23 Area-3 rooms on
+panopin-gpu (smoke/tier1_recall_full.py). True-room ranks: office_3=1, office_4=2, office_5=3, office_7=22,
+WC_2=5, conferenceRoom_1=4 → **recall@1=1/6 (17%), @2=33%, @3=50%, @5=83%**, ~23 s/room.
+- **Whole-area recall@1 (~17%) is FAR below the 3-room prototype (78%)** — the prototype looked good only
+  because it excluded the degenerate rooms. Against 23 rooms the true room is usually rank 2–5.
+- **Root pattern:** the SAME small/corridor clouds — hallway_5, hallway_6, hallway_4, WC_1/WC_2, storage_2 —
+  occupy the top loss ranks for EVERY query (loss floor ~0.11–0.16 regardless of the pano). They are a fixed,
+  identifiable set of "loss sinks"; the true room (~0.13–0.16 when a thin match) gets buried under them.
+  office_7 (rank 22) shows a genuine hard miss even so.
+**Implications:** (a) B's top-k shortlist needs k≈5 for 83% coverage but is polluted by the fixed loss-sinks —
+FGPL's geometry can reject shape-mismatched hallways but not same-shape offices, and rank-22 misses won't make
+the list; (b) THE promising lever = **per-room loss CALIBRATION** (subtract each room's baseline/typical loss
+before ranking) to demote the loss-sinks — cheap (re-ranks losses already computed), should lift recall@1 AND
+clean the shortlist. **Recommendation:** test calibration before building B's plumbing. Needs the full
+pano×room loss matrix (this run printed only top-8/pano) — re-run capturing all 23 losses per pano.
