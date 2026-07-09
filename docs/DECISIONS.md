@@ -244,3 +244,22 @@ each room's loss distribution (bootstrap for a fixed scene). **Hard ceiling:** r
 calibrated — office_8 (rank ~19-23 every formula) and storage_1 are genuine CPO color-match FAILURES (true room
 not in top-5 at all), so ~1/3 of panos (n=12 sample) are unrescuable by calibration OR a shortlist. This caps
 B's shortlist coverage. n=12 is small — validate on more in-frame panos. Matrix cached in runs/ for re-analysis.
+
+## D23 — The ~1/3 hard floor = panos that fail to SELF-localize (window/occlusion-dominated), a confidence signal (2026-07-09)
+Diagnosed the D22 recall ceiling from the saved loss matrix + the actual pano images. The hard-miss panos
+don't fail at DISCRIMINATION — they fail to self-localize to their OWN room: own-room loss ~0.25-0.26 (the
+CPO "no-match floor"), vs ~0.08 for a clean lock (office_3). Ranks: office_3 own-loss 0.084 (rank 1),
+WC_2 0.138 (rank 5), office_7 0.247 (rank 21), office_8 0.264 (rank 20), storage_1 0.258 (rank 23).
+**Cause (from the images):** office_3 (locks) is evenly textured with distinctive warm content (leather
+chairs, accent wall, photos), small window. office_8 (fails) is ~40% dominated by a large backlit WINDOW +
+blinds, big blank walls, and a foreground chair OCCLUSION — regions with poor/absent colored-geometry
+correspondence and window-driven exposure/white-balance mismatch vs the scanner's cloud RGB. So the failure
+mode is a SCENE/VIEWPOINT property (window/blank/occlusion-dominated views), NOT texture poverty and NOT a
+ranking problem — hence uncatchable by calibration or a shortlist.
+**Two levers:** (a) a ROBUST loss (trimmed/median color residual, or properly applying CPO's inlier
+confidence weighting to the cross-room ranking) could downweight the un-matchable regions and rescue
+panos where they're a MINORITY — but not window-DOMINATED ones. (b) The own-room loss is a natural
+**CONFIDENCE** signal (~0.08 lock vs ~0.25 no-lock): PanoPin can flag low-confidence panos rather than
+mis-assign them — hand FGPL only the confident seeds (~2/3), flag the rest for manual/other handling. This
+fits the coarse-seed role honestly (never feed FGPL a confidently-wrong room). n=12 sample; the ~1/3 rate
+should be validated on more panos.
