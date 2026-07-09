@@ -193,3 +193,19 @@ Per D18 the cheap Tier-1 failed. User chose "fix the speed (research)". Findings
 4060 (~40–60 min for 76×21, the real accuracy number); (b) accept a ~10–18 h CPU overnight run; (c) stop with
 the finding of record (method works — office_3 rank 1/21 +53% — but is CPU-bound). Plan-2 (cheap Tier-1) is
 ABANDONED; score_room_cheap / determinism helper remain as artifacts but are not the path.
+
+## D20 — GPU gives only ~2x; CPO's bottleneck is iterative Python loops, not GPU-able math (2026-07-09)
+Built `panopin-gpu` (torch 2.0.1+cu118 + torch_scatter 2.1.2+pt20cu118 + CPO deps) — runs correctly on the
+RTX 4060 (Ada). One-pano timing, full `localize_pair`, office_3 vs all 21 rooms:
+- **rank 1** (loss 0.0807, matches CPU 0.0814 — recall preserved on GPU), but **mean 22.4 s/room** vs CPU
+  ~41 s — only ~**1.8x**, NOT the hoped ~20x.
+- **Why:** CPO's costly parts are ITERATIVE loops — inlier detection iterates ~9360 poses in Python, and the
+  Adam refine runs top_k=6 × num_iter=100 = 600 small optimizer steps. Both are kernel-launch/Python-overhead
+  bound; the GPU can't accelerate them much. The GPU only helps the tensor-heavy score-map math.
+- **Reducing ONLY the inlier pool** (keep full search + refine) did NOT speed it up either (~20 s/room, killed
+  after 12 min) — the Adam refine is also a bottleneck, not just inlier detection.
+**Conclusion:** the accurate CPO pipeline is ~20–22 s/room regardless of CPU/GPU or these config tweaks →
+~7–8 min to assign ONE pano against 21 rooms. Genuine speed (~1–2 s/room) would require VECTORISING CPO's
+score-map + refine loops (batch the pose pool as tensor ops) — real dev work on vendored code — or a lighter
+method for the coarse-seed role. Hardware alone is not the fix. `panopin-gpu` env kept (works; ~2x faster;
+useful if the loops are later vectorised). Smoke: smoke/exp_reduced_inlier_gpu.py, smoke/tier1_recall_full.py.
