@@ -22,11 +22,26 @@ _Newest first. Update at the END of every session: what changed, what's next, wh
   in-frame (76) vs all (85). Determinism: CPO not bit-reproducible on CPU (~±0.02 loss); deferred (D1).
 - Candidates = individual S3DIS room segments (`Stanford3dDataset_v1.2/Area_3/<room>/<room>.txt`); pose
   search within a room is bounded by that segment's own extent (quantile trans init).
-- **NEXT = T4:** define the FGPL hand-off — what the coarse seed must deliver (top-1 room? top-k? coarse
-  pose?). That decides whether 78% recall@1 is already enough (seed role → move on) or accuracy needs work
-  on the same-shape-office / degenerate-room cases. Baseline to beat unchanged: 5.9%.
-- Plans: `docs/plans/2026-07-08-coarse-room-cpo-v0.md` (v0), `docs/plans/2026-07-09-cheap-tier1-eval.md`
-  (Plan 2, ABANDONED). Decisions D14–D20. SDD ledger has the full P2 gate/GPU trail.
+- **T4 FGPL hand-off SCOPED (D-spec 2026-07-09-fgpl-handoff-scope):** FGPL needs per pano only {top-1
+  room_label, rough 2D position ~3 m}; no rotation/6-DoF. Production FGPL is top-1 (top-k `infer_room` was
+  deprecated). Chose **B: hand off a shortlist + re-enable FGPL top-k** (PanoPin narrows, FGPL disambiguates).
+- **Whole-area reality (D21):** vs all 23 rooms, raw recall@1 collapses to ~17-33% — a FIXED set of
+  small/corridor "loss-sink" rooms (hallway_5/6/4, WCs, storage) top-rank every pano. (Prototype's 78% was
+  easy — it excluded them.)
+- **v1 FINALIZED — calibration + confidence gate (D22→D24):** `src/panopin/calibrate.py`. **Fair (no-GT)
+  minmax calibration** lifts whole-area recall@1 to **58%** (n=12) vs 33% raw; a tunable **confidence gate**
+  gives a precision/coverage tradeoff (−0.3 → 100% precision @ 33% coverage) and reliably FLAGS the hard-fail
+  panos. **CORRECTION (D24):** an earlier "percentile → clean 100%/58%" result was a GT LEAK; fair numbers are
+  the modest ones above. Unit-tested (tests/test_calibrate.py, 3 pass); scored via smoke/score_v1.py on the
+  cached 12×23 loss matrix (runs/calib_matrix.json).
+- **Hard floor (D23, stands):** ~1/3 of panos FAIL to self-localize (own-room loss ~0.25 vs ~0.08) —
+  window/blank-wall/occlusion-dominated views (office_8: 40% window + chair occlusion) — uncatchable by
+  calibration or shortlist; correctly flagged by the confidence gate.
+- **NEXT:** (a) wire v1 into solve.py (manifest→matrix→calibrate→predictions) + validate on more panos than
+  n=12; (b) **ceiling-push on a NEW branch** — robust/masked loss to rescue minority-window panos (D23 lever).
+- **Envs:** `panopin` (CPU repro, D10); `panopin-gpu` (torch 2.0.1+cu118, RTX 4060, ~2× — GPU runs). scan_env
+  NOT ours. Determinism: CPO not bit-reproducible on CPU (~±0.02). Baseline to beat: 5.9%.
+- Plans: v0 `docs/plans/2026-07-08-coarse-room-cpo-v0.md`; Plan 2 (cheap Tier-1) ABANDONED. Decisions D14–D24.
 
 ## Session log
 
