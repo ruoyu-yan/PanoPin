@@ -457,9 +457,17 @@ git commit -m "test(smoke): M0 reproduce CPO on one real Area_3 room"
 
 ### Task 5: `select_room` — two-tier funnel
 
+> **REVISED TEST STRATEGY (DECISIONS D15 — supersedes Step 1 below).** The synthetic
+> same-shape disambiguation test in Step 1 CANNOT pass: D13 proved CPO can't localize
+> flat box rooms. Instead: (a) unit-test the funnel LOGIC in `tests/test_select_room.py`
+> by mocking `localize_pair` (deterministic, always runs — picks min-loss room, refines
+> only top-k); (b) validate real discrimination end-to-end via `smoke/select_room_real.py`
+> on real Area_3 rooms. Both DONE (mock tests green; smoke PASS). Keep the synthetic code
+> below only as historical context.
+
 **Files:**
 - Create: `src/panopin/select_room.py`
-- Test: `tests/test_select_room.py`
+- Test: `tests/test_select_room.py` (mock funnel-logic) + `smoke/select_room_real.py` (real data)
 
 **Interfaces:**
 - Consumes: `load_cfg, TIER1, TIER2` (Task 2), `localize_pair` (Task 3).
