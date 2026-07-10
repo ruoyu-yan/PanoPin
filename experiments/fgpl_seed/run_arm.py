@@ -10,9 +10,9 @@ def run_arm(config_path, rows):
         cfg = json.load(f)
     out_base = cfg["output_dir"]
     env = dict(os.environ)
-    # Ada/cu-mismatch guard (D20: scan_env torch segfaulted on the 4060). If the
-    # estimator crashes on GPU, uncomment to force CPU:  env["CUDA_VISIBLE_DEVICES"] = ""
-    cmd = ["conda", "run", "--no-capture-output", "-n", paths.SCAN_ENV,
+    # Estimator runs in paths.ESTIMATOR_ENV (panopin-gpu, Ada-native cu118). The XDF
+    # search is CPU-bound numpy regardless (~330-390s/pano), so GPU is only ~1.2x.
+    cmd = ["conda", "run", "--no-capture-output", "-n", paths.ESTIMATOR_ENV,
            "python", str(paths.ESTIMATOR), "--config", str(config_path)]
     print("RUN:", " ".join(cmd))
     subprocess.run(cmd, cwd=str(paths.FGPL_ROOT), env=env, check=False)  # tolerate viz crash
