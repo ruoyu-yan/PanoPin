@@ -36,3 +36,31 @@ def test_identity_metadata(tmp_path, monkeypatch):
     p = sc.write_identity_metadata()
     md = json.load(open(p))
     assert md["rotation_matrix"] == [[1,0,0],[0,1,0],[0,0,1]]
+
+BASE_CONFIG_KEYS = {
+    "point_cloud_name", "pano_names", "use_local_filtering", "pkl_3d_path",
+    "alignment_path", "metadata_path", "point_cloud_path", "features_2d_dir",
+    "pano_dir", "output_dir",
+}
+
+def test_write_config_key_contract_no_narrowing(tmp_path, monkeypatch):
+    # Load-bearing: the external FGPL estimator reads exactly these keys.
+    # A wrong/missing/renamed key makes it silently fall back to TMB defaults.
+    monkeypatch.setattr(sc.paths, "WORK", tmp_path)
+    p = sc.write_config("p1", ROWS, "/seed.json", "/line_map.pkl",
+                         "/metadata.json", "/feat_dir", "/pano_dir", narrowing=None)
+    cfg = json.load(open(p))
+    assert set(cfg.keys()) == BASE_CONFIG_KEYS
+    assert cfg["pano_names"] == [r["pano_name"] for r in ROWS]
+    assert cfg["use_local_filtering"] is True
+
+def test_write_config_key_contract_with_narrowing(tmp_path, monkeypatch):
+    monkeypatch.setattr(sc.paths, "WORK", tmp_path)
+    p = sc.write_config("p1", ROWS, "/seed.json", "/line_map.pkl",
+                         "/metadata.json", "/feat_dir", "/pano_dir",
+                         narrowing={"seed_trans_radius": 2.0})
+    cfg = json.load(open(p))
+    assert set(cfg.keys()) == BASE_CONFIG_KEYS | {"seed_trans_radius"}
+    assert cfg["seed_trans_radius"] == 2.0
+    assert cfg["pano_names"] == [r["pano_name"] for r in ROWS]
+    assert cfg["use_local_filtering"] is True
