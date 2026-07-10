@@ -4,6 +4,9 @@
 # harness run outputs (predictions, reports, manifests, symlinks)
 /runs/
 
+# fgpl-seed experiment scratch outputs
+experiments/fgpl_seed/work/
+
 # python
 __pycache__/
 *.pyc
