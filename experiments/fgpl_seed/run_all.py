@@ -67,17 +67,31 @@ def main():
               f"rot_med={s['rotation']['median']:.1f} wrong={s['wrong_room_rate']} {dt:.0f}s",
               flush=True)
 
+    # Headline slice: median translation over the panos where CPO picked the TRUE room
+    # (== the region-selection is correct). This is the load-bearing number, so emit it.
+    import statistics
+    right = [r["pano_name"] for r in rows if cpo[r["pano_name"]]["room"] == r["room"]]
+    for arm in ARMS:
+        pu = results[arm]["translation"]["per_uuid"]
+        rr = [pu[u] for u in right if u in pu]
+        results[arm]["trans_median_right_room"] = statistics.median(rr) if rr else None
+        results[arm]["n_right_room"] = len(rr)
+
     out = paths.subdir("results") / "ablation.json"
     with open(out, "w") as f:
         json.dump(results, f, indent=2)
 
-    print("\n| arm | n_loc | trans median (m) | trans mean | trans max | rot median (deg) | wrong-room | runtime s |")
-    print("|-----|-------|------------------|------------|-----------|------------------|-----------|-----------|")
+    def _f(x, p=3):
+        return f"{x:.{p}f}" if x is not None else "n/a"
+    print(f"\nroom recall@1 = {len(right)}/{len(rows)}  (right-room = CPO picked the true room)")
+    print("\n| arm | n_loc | trans median | trans median (right-room) | trans mean | trans max | rot median | wrong-room | runtime s |")
+    print("|-----|-------|--------------|---------------------------|------------|-----------|-----------|-----------|-----------|")
     for arm in ARMS:
         s = results[arm]
         t, r = s["translation"], s["rotation"]
-        print(f"| {arm} | {s['n_localized']}/{len(rows)} | {t['median']:.3f} | {t['mean']:.3f} | "
-              f"{t['max']:.3f} | {r['median']:.1f} | {s['wrong_room_rate']:.2f} | {s['runtime_s']:.0f} |")
+        print(f"| {arm} | {s['n_localized']}/{len(rows)} | {_f(t['median'])} | "
+              f"{_f(s['trans_median_right_room'])} ({s['n_right_room']}) | {_f(t['mean'])} | "
+              f"{_f(t['max'])} | {_f(r['median'],1)} | {_f(s['wrong_room_rate'],2)} | {_f(s['runtime_s'],0)} |")
     print("\nwrote", out)
 
 
