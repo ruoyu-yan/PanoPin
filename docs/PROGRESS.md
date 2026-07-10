@@ -2,6 +2,15 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-10 — FGPL seed ablation DONE; color POSITION seed ~= oracle when room is right)
+- **NEW LINE: PanoPin->FGPL seed ablation** (branch feat/fgpl-seed-ablation; spec+plan docs/{specs,plans}/2026-07-10-*; code experiments/fgpl_seed/). Replace FGPL's slow SAM3+IoU jigsaw with PanoPin's color seed; measure FGPL pose accuracy on a same-shape multi-room S3DIS subset. Executed subagent-driven (SDD ledger .superpowers/sdd/progress.md has full task history).
+- **Setup:** ran FGPL entirely in the RAW S3DIS frame (identity metadata -> NO floorplan/SAM3/density front-end). 6-room subset (office_1/4/5/6/7 + hallway_3), 12 panos. Built 3d_line_map (2215 lines / 3159 intersections), fgpl_features, raw-3D seed adapter. Estimator in panopin-gpu (Ada cu118; scan_env cu116 = CPU fallback). Multi-pano Voronoi -> ~8-40s/pano (vs 325s single-pano whole-map).
+- **ORACLE GATE:** median trans 0.789m, 12/12 localized, 1/12 wrong-room -> FGPL localizes correctly given a good seed (well within FGPL's ~3m coarse tolerance; my 0.5m gate bar was miscalibrated). D25.
+- **5-ARM ABLATION (n=12), trans median / wrong-room:** oracle 0.789 / 8% ; p1(color pos) 0.946 / 33% ; p2(+grid) 0.946 / 33% (grid = NO effect) ; p3(+CPO yaw) 1.807 / 42% (HURTS) ; wrong_room 7.213 / 100%.
+- **HEADLINE:** where CPO picks the right room (8/12), its POSITION seed is as good as GT: median 0.762m vs oracle 0.725m -> FGPL localizes IDENTICALLY. The entire P1-vs-oracle gap = the 4 wrong-room misses (~22m, all -> hallway_3 loss-sink). So the color POSITION seed WORKS; the bottleneck is ROOM RECALL (67% raw min-loss). **v1 calibration (33->58% recall) is the exact lever** and cpo_seeds uses RAW min-loss (no calibrate) -> NEXT = wire v1 calibrate into the seed + re-run. Drop P2/P3.
+- **FGPL rotation convention (D25):** FGPL outputs Rp = C @ R_wc, C=[[0,0,1],[-1,0,0],[0,-1,0]] (same signed-perm Point_360 solved); Rp.T@C = camera->world (0.5deg on precise panos). FGPL rotation also ~90deg Manhattan-aliased even with a good seed. CPO rotation UNUSABLE (~120deg off GT both conventions) -> P3 garbage.
+- All local, nothing pushed. Runtime whole ablation ~40min.
+
 ## Current state (2026-07-09, latest — method validated; speed characterized; NEXT = T4 FGPL hand-off)
 - **Method VALIDATED (D14):** CPO assigns the right room for in-frame panos. But the **cheap Tier-1
   speedup is ABANDONED** (D18/D19): no cheap/coarse proxy preserves accuracy — the per-room Adam pose

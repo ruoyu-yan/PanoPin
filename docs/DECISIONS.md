@@ -282,3 +282,26 @@ at 33% coverage (tunable). Modest and NOISY (n=12) — validate on more panos. *
 (hard-fail panos fail to self-localize, own-room loss ~0.25, window/occlusion cause) — that used raw own-room
 losses, no leak; only the calibration/confidence NUMBERS in D22/D23 were inflated. Implemented in
 src/panopin/calibrate.py (minmax + gate); scored via smoke/score_v1.py; unit-tested tests/test_calibrate.py.
+
+
+## D25 — FGPL seed ablation: color POSITION seed ~= oracle when room is right; bottleneck = room recall; P2/P3 add nothing; FGPL rotation = signed-perm C (2026-07-10)
+Ran the 5-arm ablation (Oracle/P1/P2/P3/Wrong-room) feeding PanoPin's coarse seed to the modified FGPL
+(multiroom_pose_estimation), all in the RAW S3DIS frame, 6-room same-shape subset, 12 panos. Spec+plan
+docs/{specs,plans}/2026-07-10-panopin-fgpl-seed-ablation*.
+- **P1 (color position seed) ~= oracle where room is right:** median trans over the 8 correct-room panos
+  = 0.762m vs oracle 0.725m (identical). Full-set P1 median 0.946m vs oracle 0.789m; the gap is ENTIRELY
+  the 4 wrong-room misses (~22m each, all -> hallway_3 loss-sink). => the POSITION seed works; the only
+  lever is room-assignment recall (8/12 = 67% RAW min-loss). Directly motivates wiring v1 calibration
+  (lifts recall 33->58%) into cpo_seeds (which currently uses raw min-loss, no calibrate).
+- **P2 (translation-grid narrowing +-2m) = NO effect** (identical to P1): the Voronoi partition already
+  constrains enough. Drop it.
+- **P3 (CPO-yaw rotation prior) HURTS** (median 1.807m, wrong-room 42%, rot 179deg): CPO's rotation is
+  convention-unresolved (~120deg off GT in BOTH camera->world and world->camera), so the yaw prior is
+  garbage and forcing it degrades FGPL. Don't use CPO rotation as a prior until its convention is solved.
+- **FGPL rotation convention:** FGPL outputs Rp = C @ R_wc with C=[[0,0,1],[-1,0,0],[0,-1,0]] (equirect
+  signed-perm, same as Point_360's fix). Rp.T @ C = camera->world; 0.4-0.5deg on precisely-localized
+  oracle panos -> FGPL rotation is ACCURATE for those. But it is FREQUENTLY ~90deg Manhattan-aliased even
+  with a GT position seed (oracle rot median 90deg): a GOOD rotation prior could help, CPO can't give one.
+- Method notes: gate bar 0.5m was miscalibrated for a COARSE seed (FGPL needs ~3m) -> oracle substantively
+  PASSES. Runtime ~8min/arm on panopin-gpu; the XDF search is CPU-bound numpy (GPU only ~1.2x, D20-like).
+  A latent Task-5 gap (estimator needs a density PNG, viz-only) was found+fixed via the smoke.
