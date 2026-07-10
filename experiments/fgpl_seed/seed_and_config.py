@@ -20,6 +20,19 @@ def _configs_dir():
 def _density_png_path():
     return _configs_dir() / "density.png"
 
+def _ensure_density_png():
+    """Write the blank 256x256 viz-only density placeholder if absent. The estimator
+    does density_img.shape unconditionally (multiroom_pose_estimation.py:259) on a
+    cv2-loaded image; ours is viz-only (topdown render, after camera_pose.json is
+    written) since we run in the raw S3DIS frame with no floorplan. Called by BOTH
+    write_identity_metadata AND write_config so a config never points at a missing
+    file regardless of call order (review fix)."""
+    p = _density_png_path()
+    if not p.exists():
+        import cv2
+        cv2.imwrite(str(p), np.zeros((256, 256), dtype=np.uint8))
+    return p
+
 
 def write_identity_metadata():
     md = {"min_coords": [0.0, 0.0, 0.0], "max_dim": 1.0, "offset": [0.0, 0.0],
@@ -28,13 +41,7 @@ def write_identity_metadata():
     p = _configs_dir() / "metadata.json"
     with open(p, "w") as f:
         json.dump(md, f, indent=2)
-    # The estimator loads a density IMAGE (cv2.imread) and unconditionally does
-    # density_img.shape at multiroom_pose_estimation.py:259 — crashes on None. The
-    # image is viz-only (topdown render, after camera_pose.json is written) and we run
-    # in the raw S3DIS frame with no floorplan, so emit a blank 256x256 grayscale
-    # placeholder matching image_width. Written next to metadata.json.
-    import cv2
-    cv2.imwrite(str(_density_png_path()), np.zeros((256, 256), dtype=np.uint8))
+    _ensure_density_png()
     return p
 
 
@@ -74,6 +81,7 @@ def write_seed(arm, rows, gt, cpo, centroids=None):
 
 
 def write_config(arm, rows, seed_path, line_map, metadata_path, feat_dir, pano_dir, narrowing=None):
+    _ensure_density_png()   # guarantee density_image_path resolves, independent of call order
     cfg = {
         "point_cloud_name": paths.SCENE,
         "pano_names": [r["pano_name"] for r in rows],

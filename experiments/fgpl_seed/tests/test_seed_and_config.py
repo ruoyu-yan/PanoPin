@@ -55,6 +55,9 @@ def test_write_config_key_contract_no_narrowing(tmp_path, monkeypatch):
     assert set(cfg.keys()) == BASE_CONFIG_KEYS
     assert cfg["pano_names"] == [r["pano_name"] for r in ROWS]
     assert cfg["use_local_filtering"] is True
+    # write_config self-ensures the density placeholder even without a prior
+    # write_identity_metadata call (review fix: no silent missing-file crash).
+    assert sc._density_png_path().exists()
 
 def test_write_config_key_contract_with_narrowing(tmp_path, monkeypatch):
     monkeypatch.setattr(sc.paths, "WORK", tmp_path)
