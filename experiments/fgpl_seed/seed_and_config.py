@@ -17,6 +17,9 @@ def _seeds_dir():
 def _configs_dir():
     d = paths.WORK / "configs"; d.mkdir(parents=True, exist_ok=True); return d
 
+def _density_png_path():
+    return _configs_dir() / "density.png"
+
 
 def write_identity_metadata():
     md = {"min_coords": [0.0, 0.0, 0.0], "max_dim": 1.0, "offset": [0.0, 0.0],
@@ -25,6 +28,13 @@ def write_identity_metadata():
     p = _configs_dir() / "metadata.json"
     with open(p, "w") as f:
         json.dump(md, f, indent=2)
+    # The estimator loads a density IMAGE (cv2.imread) and unconditionally does
+    # density_img.shape at multiroom_pose_estimation.py:259 — crashes on None. The
+    # image is viz-only (topdown render, after camera_pose.json is written) and we run
+    # in the raw S3DIS frame with no floorplan, so emit a blank 256x256 grayscale
+    # placeholder matching image_width. Written next to metadata.json.
+    import cv2
+    cv2.imwrite(str(_density_png_path()), np.zeros((256, 256), dtype=np.uint8))
     return p
 
 
@@ -71,6 +81,7 @@ def write_config(arm, rows, seed_path, line_map, metadata_path, feat_dir, pano_d
         "pkl_3d_path": str(line_map),
         "alignment_path": str(seed_path),
         "metadata_path": str(metadata_path),
+        "density_image_path": str(_density_png_path()),
         "point_cloud_path": str(paths.WORK / "clouds" / f"{paths.SCENE}.ply"),
         "features_2d_dir": str(feat_dir),
         "pano_dir": str(pano_dir),

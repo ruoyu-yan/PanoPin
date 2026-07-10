@@ -36,11 +36,13 @@ def test_identity_metadata(tmp_path, monkeypatch):
     p = sc.write_identity_metadata()
     md = json.load(open(p))
     assert md["rotation_matrix"] == [[1,0,0],[0,1,0],[0,0,1]]
+    # also emits the viz-only density placeholder the estimator requires (line 259)
+    assert sc._density_png_path().exists()
 
 BASE_CONFIG_KEYS = {
     "point_cloud_name", "pano_names", "use_local_filtering", "pkl_3d_path",
-    "alignment_path", "metadata_path", "point_cloud_path", "features_2d_dir",
-    "pano_dir", "output_dir",
+    "alignment_path", "metadata_path", "density_image_path", "point_cloud_path",
+    "features_2d_dir", "pano_dir", "output_dir",
 }
 
 def test_write_config_key_contract_no_narrowing(tmp_path, monkeypatch):
