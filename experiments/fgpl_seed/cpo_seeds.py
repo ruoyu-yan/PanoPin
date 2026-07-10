@@ -1,9 +1,10 @@
 """Per pano: CPO localize_pair vs each of the 6 candidate rooms -> assign min-loss
 room; keep that room's (t,R). This is the seed for P1/P2/P3. Run in panopin-gpu."""
 import os, sys, json, time
-_REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if _REPO not in sys.path:
-    sys.path.insert(0, _REPO)
+# panopin lives at src/ (not pip-installed); mirror the smoke-script path setup.
+_HERE = os.path.dirname(__file__)
+sys.path.insert(0, os.path.join(_HERE, "..", "..", "src"))   # panopin.*
+sys.path.insert(0, os.path.join(_HERE, "..", ".."))          # experiments.* (repo root)
 from experiments.fgpl_seed import subset, paths
 from panopin.determinism import pin
 from panopin.cpo_config import load_cfg
