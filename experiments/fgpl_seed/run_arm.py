@@ -1,0 +1,28 @@
+"""Run the FGPL estimator for one arm config; collect per-pano camera_pose.json.
+camera_pose.json is written (line 524) BEFORE the composite viz (line 581), so a
+viz-stage crash still leaves per-pano poses readable — we tolerate a non-zero exit
+and read whatever poses were produced."""
+import json, subprocess, os
+from experiments.fgpl_seed import paths
+
+def run_arm(config_path, rows):
+    with open(config_path) as f:
+        cfg = json.load(f)
+    out_base = cfg["output_dir"]
+    env = dict(os.environ)
+    # Ada/cu-mismatch guard (D20: scan_env torch segfaulted on the 4060). If the
+    # estimator crashes on GPU, uncomment to force CPU:  env["CUDA_VISIBLE_DEVICES"] = ""
+    cmd = ["conda", "run", "--no-capture-output", "-n", paths.SCAN_ENV,
+           "python", str(paths.ESTIMATOR), "--config", str(config_path)]
+    print("RUN:", " ".join(cmd))
+    subprocess.run(cmd, cwd=str(paths.FGPL_ROOT), env=env, check=False)  # tolerate viz crash
+    poses = {}
+    for r in rows:
+        cp = os.path.join(out_base, r["pano_name"], "camera_pose.json")
+        if os.path.exists(cp):
+            with open(cp) as f:
+                d = json.load(f)
+            poses[r["pano_name"]] = {"translation": d["translation"], "rotation": d["rotation"]}
+        else:
+            poses[r["pano_name"]] = None
+    return poses
