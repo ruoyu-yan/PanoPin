@@ -125,10 +125,19 @@ def score_room_cheap(cfg, pano_path, cloud_path):
     return t, R, float(loss_c.detach())
 
 
-def residuals_at_pose(cfg, pano_path, cloud_path, t, R):
+def residuals_at_pose(cfg, pano_path, cloud_path, t, R, match_color=False, seed=0):
     """Per-point color residuals ||sample_rgb - cloud_rgb|| at a FIXED given pose (t,R),
     replicating ONLY cpo.sampling_loss's sampling geometry (sampling_loss.py:189-203)
-    WITHOUT the mean. Deliberately excludes match_color/sharpen_color: those are upstream
+    WITHOUT the mean.
+
+    Driver-isolation params (D28), both defaulting to the D27 raw path so existing callers
+    and the fidelity gate are unchanged:
+      - match_color=True  applies CPO's color_match(pano, cloud_rgb) to the pano image before
+        sampling (mirrors localize_pair; toggles the match_color factor of the a-vs-a' gap).
+      - seed  reseeds np.random before read_txt_pcd's subsample draw (toggles the subsample
+        factor). Default 0 == pin()'s seed == the D27 residuals.
+
+    Deliberately excludes (by default) match_color/sharpen_color: those are upstream
     preprocessing steps applied by CALLERS (e.g. localize_pair, score_room_cheap) to `img`
     /`rgb` BEFORE handing them to sampling_loss/refine_pose_sampling_loss -- sampling_loss.py
     itself (lines 189-203) only consumes img/rgb as given, with no color adjustment. Composes
@@ -152,15 +161,19 @@ def residuals_at_pose(cfg, pano_path, cloud_path, t, R):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     sample_rate = getattr(cfg, 'sample_rate', 1)
 
-    np.random.seed(0)  # match panopin.determinism.pin()'s default seed so a second,
-    # independent read_txt_pcd reload of the same cloud draws the identical random
-    # subsample (sample_rate>1 branch) as the caller's own first load -- see docstring.
+    np.random.seed(seed)  # default 0 == pin()'s seed so a second, independent read_txt_pcd
+    # reload of the same cloud draws the identical random subsample (sample_rate>1 branch) as
+    # the caller's own first load; a different seed toggles the subsample factor (D28).
     xyz_np, rgb_np = data_utils.read_txt_pcd(cloud_path, sample_rate=sample_rate)
     xyz = torch.from_numpy(xyz_np).float().to(device)
     rgb = torch.from_numpy(rgb_np).float().to(device)
 
     orig_img = cv2.cvtColor(cv2.imread(pano_path), cv2.COLOR_BGR2RGB)
     orig_img = cv2.resize(orig_img, (2048, 1024))
+    if match_color:                                  # D28: replicate localize_pair's color_match
+        mod_img = (torch.from_numpy(orig_img).float() / 255.).to(device)
+        new_img = color_match(mod_img, rgb)
+        orig_img = (255 * new_img.detach().cpu().numpy()).astype(np.uint8)
 
     mdh = getattr(cfg, 'main_downsample_h', 1); mdw = getattr(cfg, 'main_downsample_w', 1)
     img = cv2.resize(orig_img, (orig_img.shape[1] // mdw, orig_img.shape[0] // mdh))

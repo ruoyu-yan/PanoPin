@@ -39,9 +39,22 @@ def main():
 
     resid = cpo_adapter.residuals_at_pose(cfg, pano, cloud, t_used, R_used)
     m = float(np.mean(resid))
-    print(f"sampling_loss L = {L:.6f}   mean(residuals) = {m:.6f}   |diff| = {abs(m - L):.2e}   n_resid = {len(resid)}")
-    assert abs(m - L) < 1e-4, f"FIDELITY FAIL: {abs(m - L):.2e} >= 1e-4"
-    print("FIDELITY OK")
+    print(f"[raw]        sampling_loss L = {L:.6f}   mean(residuals) = {m:.6f}   |diff| = {abs(m - L):.2e}   n_resid = {len(resid)}")
+    assert abs(m - L) < 1e-4, f"RAW FIDELITY FAIL: {abs(m - L):.2e} >= 1e-4"
+
+    # --- match_color path (D28) ---: reference = sampling_loss over a color_matched pano,
+    # round-tripped through uint8 exactly as residuals_at_pose(match_color=True) does.
+    from color_utils import color_match
+    mod = (torch.from_numpy(orig).float() / 255.).to(device)
+    mc_orig = (255 * color_match(mod, rgb).detach().cpu().numpy()).astype(np.uint8)
+    mc_img = (torch.from_numpy(mc_orig).float() / 255.).to(device)
+    _, _, L_mc = sampling_loss(mc_img, xyz, rgb, input_trans, input_rot, 0, cfg, return_list=True)
+    L_mc = float(L_mc.detach())
+    resid_mc = cpo_adapter.residuals_at_pose(cfg, pano, cloud, t_used, R_used, match_color=True)
+    m_mc = float(np.mean(resid_mc))
+    print(f"[match_color] sampling_loss L = {L_mc:.6f}   mean(residuals) = {m_mc:.6f}   |diff| = {abs(m_mc - L_mc):.2e}   n_resid = {len(resid_mc)}")
+    assert abs(m_mc - L_mc) < 1e-4, f"MATCH_COLOR FIDELITY FAIL: {abs(m_mc - L_mc):.2e} >= 1e-4"
+    print("FIDELITY OK (raw + match_color)")
 
 if __name__ == "__main__":
     main()
