@@ -366,6 +366,35 @@ Both methods share `calibrate.minmax_scores`; only the per-room score differs. E
   no-third_party/comparison-validity/fidelity all hold; the never-task-reviewed D26 p1_cal wiring holds up
   (uses `poses[room_cal]`, test-covered). NOTE for next session: 2 PRE-EXISTING `test_narrowing.py` reds
   (scan2measure on `main` lacks the parked P2/P3 narrowing params) — not a regression from this work.
+
+
+## D28 — Driver isolation: the raw-mean gate advantage is BOTH match_color AND weighting (~half each), NOT subsample (2026-07-13)
+Followed up D27's a(3/12)→a′(9/12) prefix_correct lead by toggling the three confounded factors at the SAME
+cached poses. `residuals_at_pose` gained `match_color`/`seed` flags (branch `feat/driver-isolation`;
+fidelity-gated BOTH paths vs `cpo.sampling_loss`'s own scalar, |diff|=0). Code
+`experiments/fgpl_seed/{driver_capture,driver_analysis}.py`; numbers `experiments/fgpl_seed/DRIVER_ISOLATION.md`.
+- **Results (n=12, prefix_correct):** a (matchcolor+weighted+CPOsub) **3/12**; a′ (raw+unweighted+seed0)
+  **9/12**; a′_mc (matchcolor+unweighted+seed0) **6/12**; a′_seed1/seed2 (raw, alt subsample) **9/9**.
+- **match_color = MAJOR driver:** turning it ON drops a′ 9→6 (half the Δ=6 gap). CPO's histogram-matching
+  homogenizes colors across rooms → less cross-room separability for the gate.
+- **subsample = NOT a driver:** a′_seed1=a′_seed2=a′=9 (zero effect) — confirms the fixed seed-0 subsample in
+  `residuals_at_pose` is not an artifact.
+- **weighting = MAJOR driver (by elimination):** a′_mc(6, matchcolor+unweighted) → a(3, matchcolor+WEIGHTED);
+  the remaining Δ3, with subsample proven 0-effect, is weighting (the D21 loss-sink is an inlier-weighting
+  artifact). NOT directly measured — a weighted variant needs the expensive inlier score-maps (~24min);
+  inferred, and clean because subsample contributes 0.
+- **Conclusion:** BOTH of CPO's fine-localization refinements — match_color AND inlier weighting — HURT the
+  coarse room-discrimination gate, roughly additively (~3 each). The best gate score is a **RAW UNWEIGHTED
+  residual mean at the localized pose** (cheap: `residuals_at_pose`, no score-maps). Nuance: match_color-
+  unweighted raises early-confidence (prefix 3→6) but lowers full recall (8→7); the weighted `a` maximizes
+  total recall (8) yet wrecks confidence ordering (prefix 3) — for seed-only-when-confident, prefix wins,
+  so raw-unweighted (9) dominates.
+- **Caveats:** n=12 (prefix tail-sensitive); weighting elimination-inferred not measured. LEAD, validate at
+  larger n before deploying.
+- **NEXT:** (i) [optional] directly measure weighting with a weighted-unmatchcolor variant to confirm the
+  elimination; (ii) **wire the raw-unweighted residual-mean score into the gate's room assignment** (replace
+  `cache per_room` in `calibrate.assign`) + validate at larger n (the D26 (b) scaling lever, now with the
+  RIGHT score); robust-loss stays parked (D27).
 - **NEXT:** (i) ISOLATE the driver — ablate match_color alone / weighting alone / subsample (cheap, reuses
   `residuals.json`); (ii) if raw-mean holds, wire a raw-residual room score into the gate and validate at
   larger n (the D26 (b) scaling lever, now with a better score to scale); (iii) robust-loss stays parked.

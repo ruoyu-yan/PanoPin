@@ -2,6 +2,20 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-13 latest — driver isolation: raw-mean advantage = match_color + weighting, NOT subsample, D28)
+- Followed up D27's raw-mean lead: toggled the 3 confounded factors at the same cached poses. Branch
+  `feat/driver-isolation` (off main). `residuals_at_pose` gained match_color/seed flags (fidelity-gated both
+  paths, |diff|=0). Code experiments/fgpl_seed/{driver_capture,driver_analysis}.py; numbers DRIVER_ISOLATION.md.
+- **RESULT (n=12, prefix_correct):** a (deployed matchcolor+weighted) 3/12; a′ (raw+unweighted) 9/12; a′_mc
+  (matchcolor+unweighted) 6/12; a′_seed1/2 (raw, alt subsample) 9/9. → **match_color = MAJOR driver** (9→6),
+  **weighting = MAJOR driver** (6→3, by elimination), **subsample = NOT a driver** (0 effect). Both of CPO's
+  fine-loc refinements hurt the coarse room gate, ~additively. Endpoints reproduce D27 exactly. See D28.
+- **Takeaway:** best gate score = RAW UNWEIGHTED residual mean at the localized pose (cheap, no score-maps).
+- **NEXT:** wire that raw-residual-mean score into `calibrate.assign`'s room assignment (replace cache
+  per_room) + validate at larger n (D26 (b) scaling, now with the right score). Optional: directly measure
+  the weighting factor (weighted-unmatchcolor variant, ~24min). Robust-loss parked (D27).
+- Branch NOT yet finished (merge/keep decision pending).
+
 ## Current state (2026-07-13 later — robust-gate comparison: robust NOT the lever; raw-mean scoring IS a lead, D27)
 - Ran the precision/coverage comparison (spec+plan docs/{specs,plans}/2026-07-13-robust-gate-comparison*;
   code experiments/fgpl_seed/{robust_capture,robust_analysis}.py + src/panopin/robust_score.py + adapter
