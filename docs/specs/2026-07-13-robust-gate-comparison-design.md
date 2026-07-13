@@ -75,11 +75,14 @@ re-localization is needed. A capture script iterates the 72 (pano, room) pairs a
 **101-point percentile grid** (p0..p100) of the residual vector as JSON (`work/seeds/residuals.json`) — exact
 for median and any percentile, sufficient for trimmed-means over a percentile sub-range, tiny, no pickle.
 
-**Fidelity validation (gate before trusting robust stats):** the script also reproduces CPO's *weighted
-masked mean* of the residuals and asserts it matches `cache[pano]["per_room"][room]` within CPO's known
-CPU/GPU non-determinism band (≈±0.02, D1). If it doesn't, the sampling replication is wrong and must be fixed
-before any robust conclusion. (The robust statistic itself operates on the **raw** unweighted residuals — the
-cleanest reading of "per-point color mismatch" — while the weighted mean is used only for this fidelity check.)
+**Fidelity validation (gate before trusting robust stats):** a check asserts that `mean(residuals_at_pose)`
+equals CPO's own `cpo.sampling_loss` scalar at the **same** pose to 1e-4 — an EXACT match, because both are
+the unweighted mean of `‖sample_rgb[mask] − cloud_rgb[mask]‖` over the same sampled points, so the replication
+is proven bit-faithful. (Refined during planning from an earlier "match the cached loss within ±0.02" idea:
+the cached loss comes from `refine_pose_sampling_loss`, which is a *weighted* masked mean via the `SamplingLoss`
+class needing the expensive score-maps, so it is not the right fidelity target. The robust statistic operates
+on these raw unweighted residuals.) If the check fails, the replication is wrong and must be fixed before any
+robust conclusion.
 
 ### 5.2 Robust scores (offline, no GPU) — `src/panopin/robust_score.py` (NEW, fair/no-GT)
 Pure functions: `robust_scores(residual_grids, stat, **params) -> {pano: {room: score}}`, where `stat ∈
