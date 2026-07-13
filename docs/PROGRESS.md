@@ -2,6 +2,22 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-13 — wired v1 calibration into the seed; NEGATIVE result, D26)
+- **Executed the D25 next step** (branch feat/fgpl-seed-ablation, LOCAL, committed, NOT pushed): `cpo_seeds`
+  now caches EVERY room's pose + the v1 minmax-calibrated room (`panopin.calibrate`); new `p1_cal` arm seeds
+  FGPL from the calibrated room; dropped the dead p2/p3 (D25). Fresh re-run: cpo_seeds 25min (panopin-gpu) +
+  4-arm ablation. Tests 10/10 green.
+- **RESULT = calibration did NOT boost FGPL; it slightly HURT it (n=12):** trans median oracle 0.789 / p1
+  (raw) 1.171 / **p1_cal (calibrated) 1.839** / wrong_room 7.004 ; wrong-room p1 33% -> **p1_cal 42%**.
+  Room recall raw 8/12 = cal 8/12 (calibration TRADES misses: fixed 2 loss-sink, broke 2 into siblings, equal
+  magnitude). See RESULTS.md "Calibration re-run" + DECISIONS **D26**.
+- **The offline 10/12 projection was NOISE** (ran on the stale loss cache; CPO non-reproducible D1). n=12 is
+  under-powered: p1's own median drifted 0.946->1.171 run-to-run, no code change. DON'T conclude from n=12.
+- **NEXT (pick one, none run):** (a) gate-based ABSTENTION arm — the confidence gate is the only clean piece
+  (3/3 confident correct, withholds both breaks) -> hand FGPL nothing on flagged panos rather than a wrong
+  room; (b) SCALE to all ~76 in-frame panos to beat the noise; (c) robust/masked-loss ceiling-push
+  (branch feat/robust-loss-ceiling) for a better assignment than minmax. Recommend (a)+(b) together.
+
 ## Current state (2026-07-10 — FGPL seed ablation DONE; color POSITION seed ~= oracle when room is right)
 - **NEW LINE: PanoPin->FGPL seed ablation** (branch feat/fgpl-seed-ablation; spec+plan docs/{specs,plans}/2026-07-10-*; code experiments/fgpl_seed/). Replace FGPL's slow SAM3+IoU jigsaw with PanoPin's color seed; measure FGPL pose accuracy on a same-shape multi-room S3DIS subset. Executed subagent-driven (SDD ledger .superpowers/sdd/progress.md has full task history).
 - **Setup:** ran FGPL entirely in the RAW S3DIS frame (identity metadata -> NO floorplan/SAM3/density front-end). 6-room subset (office_1/4/5/6/7 + hallway_3), 12 panos. Built 3d_line_map (2215 lines / 3159 intersections), fgpl_features, raw-3D seed adapter. Estimator in panopin-gpu (Ada cu118; scan_env cu116 = CPU fallback). Multi-pano Voronoi -> ~8-40s/pano (vs 325s single-pano whole-map).

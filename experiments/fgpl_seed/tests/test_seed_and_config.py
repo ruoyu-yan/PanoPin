@@ -23,6 +23,24 @@ def test_p1_seed_uses_cpo_xy(tmp_path, monkeypatch):
     m = {x["pano_name"]: x["camera_position"] for x in json.load(open(p))["matches"]}
     assert m["u1"] == [1.1, 2.1]                      # CPO t xy
 
+def test_p1_cal_seed_uses_calibrated_room_pose(tmp_path, monkeypatch):
+    monkeypatch.setattr(sc.paths, "WORK", tmp_path)
+    # u1's raw min-loss room is a loss-sink (office_6), but v1 calibration recovers the
+    # true room office_4 -> p1_cal must seed from poses[office_4], NOT the raw t.
+    cpo = {
+        "u1": {"t": [7.9, 9.2, 1.5], "R": [[1,0,0],[0,1,0],[0,0,1]], "loss": 0.1,
+               "room": "office_6", "room_cal": "office_4",
+               "poses": {"office_4": {"t": [1.1, 2.1, 1.3], "R": [[1,0,0],[0,1,0],[0,0,1]]},
+                         "office_6": {"t": [7.9, 9.2, 1.5], "R": [[1,0,0],[0,1,0],[0,0,1]]}}},
+        "u2": {"t": [7.9, 9.2, 1.5], "R": [[1,0,0],[0,1,0],[0,0,1]], "loss": 0.1,
+               "room": "office_6", "room_cal": "office_6",
+               "poses": {"office_6": {"t": [7.9, 9.2, 1.5], "R": [[1,0,0],[0,1,0],[0,0,1]]}}},
+    }
+    p = sc.write_seed("p1_cal", ROWS, GT, cpo)
+    m = {x["pano_name"]: x["camera_position"] for x in json.load(open(p))["matches"]}
+    assert m["u1"] == [1.1, 2.1]                      # calibrated room office_4's CPO xy
+    assert m["u2"] == [7.9, 9.2]                      # calibrated == raw here
+
 def test_wrong_room_seed_uses_sibling_centroid(tmp_path, monkeypatch):
     monkeypatch.setattr(sc.paths, "WORK", tmp_path)
     # sibling of office_4 is office_6 -> u1 should be seeded at u2's room area, not its own

@@ -1,25 +1,24 @@
-"""Run all 5 arms on the subset, score each vs GT, emit a comparison table.
-Arms: oracle / p1 / p2 / p3 / wrong_room. P1/P2/P3 read the CPO cache; P2 adds a
-translation radius; P3 adds P2 + a yaw prior derived from CPO's rotation, mapped into
-FGPL's rotation convention.
+"""Run the ablation arms on the subset, score each vs GT, emit a comparison table.
+Arms: oracle / p1 / p1_cal / wrong_room.
+  - oracle     : GT position seed (upper bound).
+  - p1         : CPO raw min-loss room's position seed.
+  - p1_cal     : CPO v1-minmax-calibrated room's position seed (D24) -- the new lever.
+  - wrong_room : sibling-room centroid (catastrophic floor).
+P2 (translation-grid narrowing) and P3 (CPO-yaw prior) were dropped after D25: P2 was a
+no-op (Voronoi already constrains the search) and P3 hurt (CPO rotation is convention-
+broken). The flag-gated FGPL narrowing edit still lives on scan2measure
+feat/panopin-seed-narrowing / patches/fgpl_narrowing.patch if ever needed.
 
 Rotation scoring: FGPL emits rotation in the equirect signed-perm convention
 C=[[0,0,1],[-1,0,0],[0,-1,0]] (validated: Rp.T @ C == camera->world, ~0.5 deg on
 precisely-localized oracle panos). We convert to camera->world before scoring so the
-rotation numbers are comparable to GT R_cw.
-
-CAVEAT (P3): the estimator runs all panos in one process with a single seed_yaw_deg,
-so P3 uses ONE global (median) yaw prior. Panos whose true yaw is >tol from it fall
-back to the full rotation set (== P2). Per-pano yaw would need per-pano runs; out of
-scope for this first cut. Headline metrics = translation + wrong-room."""
-import json, time, math, numpy as np
+rotation numbers are comparable to GT R_cw."""
+import json, time, statistics, numpy as np
 from experiments.fgpl_seed import (subset, seed_and_config as sc, run_arm, score, paths)
 from eval import s3dis_gt
 
-P2_RADIUS = 2.0            # meters (design §7)
-P3_YAW_TOL = 30.0          # degrees
 C = np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]], float)   # FGPL equirect signed-perm
-ARMS = ["oracle", "p1", "p2", "p3", "wrong_room"]
+ARMS = ["oracle", "p1", "p1_cal", "wrong_room"]
 
 
 def _fgpl_rot_to_cw(R):
@@ -27,11 +26,10 @@ def _fgpl_rot_to_cw(R):
     return (np.array(R).T @ C).tolist()
 
 
-def _fgpl_yaw_from_cpo_R(cpo_R):
-    """CPO rotation (camera->world, S3DIS frame) -> yaw in FGPL's rotation convention.
-    FGPL rot = C @ R_wc = C @ (camera->world).T; yaw = atan2(Rf[1,0], Rf[0,0])."""
-    Rf = C @ np.array(cpo_R).T
-    return math.degrees(math.atan2(Rf[1, 0], Rf[0, 0]))
+def _seed_room(arm, name, cpo):
+    """The room whose CPO pose seeded this arm (== 'correct region' when it matches GT).
+    p1 uses raw min-loss; p1_cal uses the calibrated room."""
+    return cpo[name]["room_cal"] if arm == "p1_cal" else cpo[name]["room"]
 
 
 def main():
@@ -45,15 +43,8 @@ def main():
 
     results = {}
     for arm in ARMS:
-        narrowing = None
-        if arm == "p2":
-            narrowing = {"seed_trans_radius": P2_RADIUS}
-        elif arm == "p3":
-            yaws = [_fgpl_yaw_from_cpo_R(cpo[r["pano_name"]]["R"]) for r in rows]
-            narrowing = {"seed_trans_radius": P2_RADIUS,
-                         "seed_yaw_deg": float(np.median(yaws)), "seed_yaw_tol": P3_YAW_TOL}
         seed = sc.write_seed(arm, rows, gt, cpo, centroids=cents)
-        cfg = sc.write_config(arm, rows, seed, line_map, md, feat, panos, narrowing=narrowing)
+        cfg = sc.write_config(arm, rows, seed, line_map, md, feat, panos)
         t0 = time.time()
         poses = run_arm.run_arm(cfg, rows)
         dt = time.time() - t0
@@ -67,15 +58,23 @@ def main():
               f"rot_med={s['rotation']['median']:.1f} wrong={s['wrong_room_rate']} {dt:.0f}s",
               flush=True)
 
-    # Headline slice: median translation over the panos where CPO picked the TRUE room
-    # (== the region-selection is correct). This is the load-bearing number, so emit it.
-    import statistics
-    right = [r["pano_name"] for r in rows if cpo[r["pano_name"]]["room"] == r["room"]]
+    # Headline slice: median translation over the panos where the ARM's SEED picked the
+    # TRUE room (== region-selection correct). This is the load-bearing number: when the
+    # room is right, the color position seed should be ~= oracle. p1 uses raw min-loss,
+    # p1_cal uses the calibrated room -- so the two slices cover different pano sets.
     for arm in ARMS:
+        if arm in ("oracle", "wrong_room"):
+            results[arm]["trans_median_right_room"] = None
+            results[arm]["n_right_room"] = None
+            continue
+        right = [r["pano_name"] for r in rows if _seed_room(arm, r["pano_name"], cpo) == r["room"]]
         pu = results[arm]["translation"]["per_uuid"]
         rr = [pu[u] for u in right if u in pu]
         results[arm]["trans_median_right_room"] = statistics.median(rr) if rr else None
         results[arm]["n_right_room"] = len(rr)
+
+    raw_recall = sum(1 for r in rows if cpo[r["pano_name"]]["room"] == r["room"])
+    cal_recall = sum(1 for r in rows if cpo[r["pano_name"]]["room_cal"] == r["room"])
 
     out = paths.subdir("results") / "ablation.json"
     with open(out, "w") as f:
@@ -83,15 +82,18 @@ def main():
 
     def _f(x, p=3):
         return f"{x:.{p}f}" if x is not None else "n/a"
-    print(f"\nroom recall@1 = {len(right)}/{len(rows)}  (right-room = CPO picked the true room)")
+    n = len(rows)
+    print(f"\nroom recall@1: raw min-loss (p1) = {raw_recall}/{n}   calibrated (p1_cal) = {cal_recall}/{n}")
     print("\n| arm | n_loc | trans median | trans median (right-room) | trans mean | trans max | rot median | wrong-room | runtime s |")
     print("|-----|-------|--------------|---------------------------|------------|-----------|-----------|-----------|-----------|")
     for arm in ARMS:
         s = results[arm]
         t, r = s["translation"], s["rotation"]
-        print(f"| {arm} | {s['n_localized']}/{len(rows)} | {_f(t['median'])} | "
-              f"{_f(s['trans_median_right_room'])} ({s['n_right_room']}) | {_f(t['mean'])} | "
-              f"{_f(t['max'])} | {_f(r['median'],1)} | {_f(s['wrong_room_rate'],2)} | {_f(s['runtime_s'],0)} |")
+        nrr = s["n_right_room"]
+        rr_str = f"{_f(s['trans_median_right_room'])} ({nrr})" if nrr is not None else "n/a"
+        print(f"| {arm} | {s['n_localized']}/{n} | {_f(t['median'])} | "
+              f"{rr_str} | {_f(t['mean'])} | {_f(t['max'])} | {_f(r['median'],1)} | "
+              f"{_f(s['wrong_room_rate'],2)} | {_f(s['runtime_s'],0)} |")
     print("\nwrote", out)
 
 

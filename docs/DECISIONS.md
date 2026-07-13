@@ -305,3 +305,33 @@ docs/{specs,plans}/2026-07-10-panopin-fgpl-seed-ablation*.
 - Method notes: gate bar 0.5m was miscalibrated for a COARSE seed (FGPL needs ~3m) -> oracle substantively
   PASSES. Runtime ~8min/arm on panopin-gpu; the XDF search is CPU-bound numpy (GPU only ~1.2x, D20-like).
   A latent Task-5 gap (estimator needs a density PNG, viz-only) was found+fixed via the smoke.
+
+
+## D26 — Wiring v1 minmax calibration into the seed did NOT boost FGPL on the n=12 subset (it slightly hurt); the D25 "next step" is closed NEGATIVE (2026-07-13)
+Executed the D25/HANDOVER next step: modified `cpo_seeds.py` to cache EVERY room's pose (not just min-loss)
++ compute the v1 minmax-calibrated room (`panopin.calibrate`, D24); added a `p1_cal` arm seeding FGPL from
+the calibrated room; dropped the D25-dead p2/p3; re-ran (cpo_seeds 25min panopin-gpu + 4-arm ablation).
+**Result — calibration made FGPL WORSE, not better, on this 6-room n=12 subset:**
+- Full-set trans median: oracle 0.789 / **p1 (raw min-loss) 1.171 / p1_cal (calibrated) 1.839** / wrong_room
+  7.004. Wrong-room: p1 33% (4/12) -> **p1_cal 42% (5/12)**. Right-room slice: p1 0.921 (8) vs p1_cal 1.158 (8).
+- **Room recall unchanged: raw 8/12 = calibrated 8/12** (fresh self-consistent losses). Calibration TRADES
+  misses, not removes them: per-pano it FIXED 2 loss-sink misses (870 office_4 22.0->2.3m; 0e3 office_7
+  24.2->3.5m) but BROKE 2 correct panos into siblings (7e48 office_1->office_5 1.0->14.9m; decc hallway_3->
+  office_5 0.9->22.1m). The sibling-confusion errors it INTRODUCES are as large as the loss-sink errors it
+  removes. The shared multi-pano Voronoi also means changed seeds perturb UNCHANGED panos (614/995/d6f
+  nudged ~+1m), because the partition is global, not per-pano.
+- **The offline projection (10/12) that motivated this was a NOISE ARTIFACT.** It ran calibrate on the OLD
+  committed loss cache; a fresh cache (CPO non-reproducible, D1) gave 8/12. Cross-run noise is real and
+  large at n=12: p1's OWN median drifted 0.946 (2026-07-10 run) -> 1.171 (this run) with NO code change.
+  So the p1->p1_cal delta (+0.67m) is only ~3x the bare p1 run-to-run noise (~0.2m) -> under-powered.
+- **Salvageable piece = the confidence GATE, not the assignment.** Confident subset 3/3 correct (25%
+  coverage); it correctly WITHHOLDS both breaks (7e48 conf -0.229, decc +0.187 -> not confident) — but also
+  withholds the 2 fixes. Precision-preserving, low coverage (same tradeoff as D24). So the promising use is
+  ABSTAIN-not-mis-seed (hand FGPL nothing on flagged panos), NOT swapping in the calibrated room wholesale.
+- **Conclusion:** minmax calibration is too noisy at n=12 to move the room-recall bottleneck, and used as a
+  seed selector it net-hurts FGPL here. Options going forward (none run yet): (a) gate-based ABSTENTION arm
+  (seed only confident panos, fall back otherwise); (b) SCALE to all ~76 in-frame panos to beat the noise
+  before concluding either way; (c) a better assignment lever than minmax (the robust/masked-loss
+  ceiling-push thread, feat/robust-loss-ceiling) to fix loss-sinks WITHOUT breaking genuine corridors.
+- Code: `cpo_seeds.py` (per-room poses + calibrate), `seed_and_config.py` (p1_cal), `run_all.py` (4-arm),
+  `tests/test_seed_and_config.py` (+p1_cal test, 10/10 green). Numbers in RESULTS.md "Calibration re-run".

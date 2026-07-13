@@ -61,7 +61,10 @@ def _pos_for(arm, r, gt, cpo, centroids):
     if arm == "wrong_room":
         sib = SIBLING[room]
         return centroids[sib][:2]
-    return cpo[name]["t"][:2]                       # p1/p2/p3 all use CPO position
+    if arm == "p1_cal":                             # v1-calibrated room's CPO position
+        cal_room = cpo[name]["room_cal"]
+        return cpo[name]["poses"][cal_room]["t"][:2]
+    return cpo[name]["t"][:2]                       # p1/p2/p3 use raw min-loss CPO position
 
 
 def write_seed(arm, rows, gt, cpo, centroids=None):

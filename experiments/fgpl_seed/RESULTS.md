@@ -63,13 +63,39 @@ a perfect position seed (oracle rot median 90°) — a *good* rotation prior cou
 3. **Drop P2 and P3.** Grid narrowing is a no-op; the CPO rotation prior is convention-broken and harmful.
 4. Rotation guidance is only worth revisiting after resolving CPO's rotation convention.
 
+## Calibration re-run (2026-07-13) — wiring v1 into the seed, NEGATIVE result
+
+Executed the "next step" above: `cpo_seeds` now caches every room's pose + the v1 minmax-calibrated room
+(`panopin.calibrate`, D24); new `p1_cal` arm seeds FGPL from the **calibrated** room; p2/p3 dropped (D25).
+Fresh self-consistent re-run (cpo_seeds 25 min + 4-arm ablation). **Calibration did NOT boost FGPL — it
+slightly hurt it on this n=12 subset.**
+
+| Arm | Seed | Trans median | Trans median (right-room) | Trans mean | Trans max | Wrong-room | Runtime |
+|-----|------|-------------:|--------------------------:|-----------:|----------:|-----------:|--------:|
+| **oracle** | GT position | 0.789 m | — | 0.758 | 1.579 | 8% (1/12) | 466 s |
+| **p1** | CPO raw min-loss | 1.171 m | 0.921 (8) | 8.191 | 24.426 | 33% (4/12) | 446 s |
+| **p1_cal** | CPO v1-calibrated | 1.839 m | 1.158 (8) | 7.966 | 24.426 | 42% (5/12) | 433 s |
+| **wrong_room** | sibling centroid | 7.004 m | — | 10.047 | 19.172 | 100% | 434 s |
+
+Room recall (cpo_seeds): **raw 8/12 = calibrated 8/12** — calibration TRADES misses, not removes them.
+Per-pano, it changed 4 seeds: **fixed 2** loss-sink misses (870 office_4 22.0→2.3 m; 0e3 office_7
+24.2→3.5 m) but **broke 2** correct panos into siblings (7e48 office_1→office_5 1.0→14.9 m; decc
+hallway_3→office_5 0.9→22.1 m). The sibling errors it introduces are as large as the loss-sink errors it
+removes; the shared multi-pano Voronoi also nudged unchanged panos ~+1 m.
+
+**Why the offline 10/12 projection was wrong:** it ran on the OLD committed loss cache; CPO is not
+bit-reproducible (D1) and a fresh cache gave 8/12. Noise is large at n=12 — p1's own median drifted
+0.946 (2026-07-10) → 1.171 (this run) with no code change. **Under-powered; do not conclude from n=12.**
+Salvageable piece = the confidence **gate** (3/3 confident correct at 25% coverage; correctly withholds
+both breaks) → use ABSTAIN-not-mis-seed, not wholesale room swap. See DECISIONS **D26**.
+
 ## Reproduce
 
 ```
-conda run -n panopin python -m experiments.fgpl_seed.gate_oracle     # Phase-0 oracle gate (~10 min)
-conda run -n panopin-gpu python -m experiments.fgpl_seed.cpo_seeds    # CPO seeds -> work/seeds/cpo_cache.json (~30 min)
-conda run -n panopin python -m experiments.fgpl_seed.run_all          # 5-arm ablation -> work/results/ablation.json (~40 min)
+conda run -n panopin     python -m experiments.fgpl_seed.gate_oracle   # Phase-0 oracle gate (~10 min)
+conda run -n panopin-gpu python -m experiments.fgpl_seed.cpo_seeds      # per-room poses + v1 calibration -> work/seeds/cpo_cache.json (~25 min)
+conda run -n panopin     python -m experiments.fgpl_seed.run_all        # 4-arm ablation (oracle/p1/p1_cal/wrong_room) -> work/results/ablation.json (~30 min)
 ```
-Estimator runs in `panopin-gpu` (Ada cu118); build tools in `scan_env`; CPO in `panopin-gpu`. The FGPL
-P2/P3 narrowing edit is `patches/fgpl_narrowing.patch` (flag-gated, default-off; apply into scan2measure).
-`work/` is gitignored — the numbers above are the committed record.
+Estimator runs in `panopin-gpu` (Ada cu118); build tools in `scan_env`; CPO in `panopin-gpu`. The dropped
+P2/P3 FGPL narrowing edit is `patches/fgpl_narrowing.patch` (flag-gated, default-off; apply into
+scan2measure). `work/` is gitignored — the numbers above are the committed record.
