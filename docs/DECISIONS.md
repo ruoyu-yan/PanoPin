@@ -379,10 +379,13 @@ fidelity-gated BOTH paths vs `cpo.sampling_loss`'s own scalar, |diff|=0). Code
   homogenizes colors across rooms → less cross-room separability for the gate.
 - **subsample = NOT a driver:** a′_seed1=a′_seed2=a′=9 (zero effect) — confirms the fixed seed-0 subsample in
   `residuals_at_pose` is not an artifact.
-- **weighting = MAJOR driver (by elimination):** a′_mc(6, matchcolor+unweighted) → a(3, matchcolor+WEIGHTED);
-  the remaining Δ3, with subsample proven 0-effect, is weighting (the D21 loss-sink is an inlier-weighting
-  artifact). NOT directly measured — a weighted variant needs the expensive inlier score-maps (~24min);
-  inferred, and clean because subsample contributes 0.
+- **weighting = MAJOR driver (by elimination, hedged):** a′_mc(6, matchcolor+unweighted) → a(3,
+  matchcolor+WEIGHTED); the remaining Δ3 is attributed to weighting (the D21 loss-sink is an inlier-weighting
+  artifact). CAVEAT (review): a′_mc and a differ in weighting AND subsample; subsample is 0-effect in the RAW
+  regime (a′_seed1=a′_seed2=a′), and this is EXTRAPOLATED to the weighted regime — plausible but not airtight,
+  since weighting reshapes the score-maps where subsample could have more leverage. So weighting is NOT
+  directly measured (a weighted variant needs the expensive inlier score-maps, ~24min); it is the parsimonious
+  inference for the Δ3, flagged as a lead not a measurement.
 - **Conclusion:** BOTH of CPO's fine-localization refinements — match_color AND inlier weighting — HURT the
   coarse room-discrimination gate, roughly additively (~3 each). The best gate score is a **RAW UNWEIGHTED
   residual mean at the localized pose** (cheap: `residuals_at_pose`, no score-maps). Nuance: match_color-
