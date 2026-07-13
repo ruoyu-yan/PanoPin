@@ -2,6 +2,21 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-13 latest — whole-area validation: raw-mean advantage does NOT generalize, D29; recall bottleneck at scale UNSOLVED)
+- Wired `raw_mean_scores` into `calibrate.assign` (deployable; reproduces D28 9/12 on 6 rooms), THEN validated
+  on the whole-area 23-room candidate set (user chose the ~90min hard-regime test over the ~12h full-pano run).
+  Branch `feat/rawmean-gate`. Code experiments/fgpl_seed/wholearea_{localize,capture,analysis}.py.
+- **RESULT (12 panos × 23 rooms):** raw min-loss recall 6/12 (misses ALL → hallway loss-sinks 2/5/6, D21 at
+  scale); CPO-loss gate prefix 2/12 recall 5/12; **raw-mean gate prefix 2/12 recall 6/12**. → D28's 6-room
+  advantage (3→9) DID NOT SURVIVE; both gates collapse to prefix 2/12 (raw-mean +1 recall = within noise). The
+  raw-mean win was a **6-room artifact** (only hallway_3 as loss-sink there; 23 rooms add many degenerate clouds).
+- **IMPLICATION:** whole-area room recall (the D26 problem) is NOT solved by ANY lever — v1 calibration /
+  robust-loss (D27) / raw-mean (D28) ALL ~2/12 confident-correct at 23 rooms. Need a genuinely DIFFERENT
+  approach: candidate PRE-FILTER to drop loss-sinks / scale-aware score tiny clouds can't game / cross-pano
+  consistency. Color POSITION seed (D25) still works WHEN room is right; room selection at scale = open hard
+  problem. See D29 + WHOLEAREA_RESULTS.md. Discipline: scale-validation caught the false lead pre-deploy.
+- Branch feat/rawmean-gate NOT yet finished (merge/keep pending).
+
 ## Current state (2026-07-13 latest — driver isolation: raw-mean advantage = match_color + weighting, NOT subsample, D28)
 - Followed up D27's raw-mean lead: toggled the 3 confounded factors at the same cached poses. Branch
   `feat/driver-isolation` (off main). `residuals_at_pose` gained match_color/seed flags (fidelity-gated both
