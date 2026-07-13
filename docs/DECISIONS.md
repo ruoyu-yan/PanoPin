@@ -398,8 +398,9 @@ fidelity-gated BOTH paths vs `cpo.sampling_loss`'s own scalar, |diff|=0). Code
   elimination; (ii) **wire the raw-unweighted residual-mean score into the gate's room assignment** (replace
   `cache per_room` in `calibrate.assign`) + validate at larger n (the D26 (b) scaling lever, now with the
   RIGHT score); robust-loss stays parked (D27).
-- **⚠️ SUPERSEDED by D29:** the raw-mean advantage in this decision is a 6-ROOM-SUBSET ARTIFACT — it does NOT
-  survive the whole-area (23-room) regime. Do NOT act on the "wire it in" recommendation; read D29 first.
+- **⚠️ REFINED by D29:** at whole-area scale (23 rooms) the raw-mean SCORE still wins (8/12 vs CPO 6/12), but
+  the prefix_correct=9/12 *gate* advantage here is 6-ROOM-SPECIFIC — the minmax confidence gate breaks at scale
+  (both →2/12). Keep the raw-mean score; the open problem moves to the confidence gate. Read D29 before acting.
 - **NEXT:** (i) ISOLATE the driver — ablate match_color alone / weighting alone / subsample (cheap, reuses
   `residuals.json`); (ii) if raw-mean holds, wire a raw-residual room score into the gate and validate at
   larger n (the D26 (b) scaling lever, now with a better score to scale); (iii) robust-loss stays parked.
@@ -411,24 +412,32 @@ User-approved D28 follow-up: re-scored the SAME 12 panos against ALL 23 Area_3 c
 loss-sink regime, v1 D21) — deployed CPO-loss gate vs raw-mean gate, both through the same `calibrate` gate.
 Localize 12×23 = 104 min GPU (incremental-save); residuals at those poses; code
 `experiments/fgpl_seed/wholearea_{localize,capture,analysis}.py`; numbers `WHOLEAREA_RESULTS.md`.
-- **Results (12 panos × 23 rooms):** raw min-loss (no calibration) recall@1 **6/12** (misses ALL → hallway
-  loss-sinks 2/5/6 — D21 confirmed at scale). **CPO-loss gate: prefix_correct 2/12, recall 5/12. raw-mean
-  gate: prefix_correct 2/12, recall 6/12.**
-- **The D28 6-room advantage (raw-mean prefix 3→9) does NOT survive:** at 23 rooms both gates collapse to
-  prefix **2/12**; raw-mean only marginally better on recall (6 vs 5, within n=12 noise). The two gates TRADE
-  which panos they get right (different sets), netting ~0. Sub-finding: calibration adds nothing for raw-mean
-  at scale (gate recall 6 == raw min-loss 6) and slightly HURTS CPO-loss (gate 5 < raw 6).
+- **Results (12 panos × 23 rooms) — SCORE vs GATE (corrected after review):**
+  | room score | uncalibrated recall@1 | +minmax gate prefix_correct | +minmax gate recall@1 |
+  | CPO-loss | 6/12 | 2/12 | 5/12 |
+  | raw-mean | **8/12** | 2/12 | 6/12 |
+- **The raw-mean SCORE DOES generalize:** uncalibrated, raw-mean picks the true room 8/12 vs CPO-loss 6/12 at
+  23 rooms — the D28 *score* advantage HOLDS at scale (raw-mean is the strongest raw room-classifier tried;
+  CPO min-loss misses ALL → hallway loss-sinks 2/5/6, D21 confirmed).
+- **What does NOT survive is the confidence GATE:** the D28 6-room *prefix* advantage (3→9) collapses to
+  **2/12 for BOTH** at 23 rooms, because the minmax calibration — tuned on the easy 6-room case — HURTS both
+  scores at scale (CPO 6→5, raw-mean 8→6 recall) and can't order confidence well over 23 rooms. So the weak
+  link at scale is the GATE over raw-mean, not the raw-mean score.
 - **Mechanism:** adding 17 loss-sink candidate rooms (small/empty corridors, WCs, storage) gives EVERY score
   — raw-mean included — degenerate clouds to be fooled by (wrong landings scatter across storage_1/2, WC_1,
   conferenceRoom_1, office_2/8, lounge_2). Raw-mean's win was specific to the easy 6-room set (only hallway_3
   as loss-sink). Dropping match_color+weighting (D28) helps separate 6 similar offices but does NOT cure the
   fundamental loss-sink degeneracy at scale.
-- **Implication (the real state of PanoPin's room recall):** the whole-area room-recall bottleneck — the
-  problem since D26 — is NOT solved by ANY lever tried: v1 minmax calibration, robust-loss (D27), and raw-mean
-  (D28) ALL collapse to ~2/12 confident-correct / ~50% raw recall on 23 rooms. A genuinely different approach
-  is needed — e.g. candidate PRE-FILTERING to drop loss-sink rooms before scoring, a scale/coverage-aware
-  score that tiny clouds can't game, or cross-pano consistency. The color POSITION seed (D25) still works
-  WHEN the room is right; room selection at scale is the open hard problem.
+- **Implication (the real state of PanoPin's room recall):** GOOD NEWS = the raw-mean SCORE is a validated
+  improvement that HOLDS at scale (8/12 vs CPO 6/12 at 23 rooms) — keep it as the room score. The OPEN problem
+  RELOCATES to the CONFIDENCE GATE: minmax calibration (D24), tuned on the easy 6-room case, breaks at 23 rooms
+  — it hurts both scores (raw-mean 8→6) and gives only ~2/12 confident-correct coverage. So the next lever is
+  a BETTER confidence mechanism over the raw-mean score (drop/replace minmax at scale; a scale-aware gate; or
+  candidate PRE-FILTERING to drop loss-sink rooms before scoring so the gate has an easier job). Robust-loss
+  (D27) stays parked. The color POSITION seed (D25) still works WHEN the room is right.
+- **Deployable now:** `calibrate.assign(robust_score.raw_mean_scores(grids))` is wired + tested (`raw_mean_scores`
+  in `src/panopin/robust_score.py`) and IS the best room-assignment available (raw-mean 8/12 > CPO 6/12), but
+  its minmax gate under-commits at scale — usable for the ASSIGNMENT, not yet for high-precision abstention.
 - **Discipline note:** whole-area validation CAUGHT a false lead (the 6-room D28 result) before it was
   deployed — exactly why "validate at scale before wiring in" mattered. Caveat: n=12 (prefix tail-sensitive),
   but the 9→2 collapse is far larger than the run-to-run noise.

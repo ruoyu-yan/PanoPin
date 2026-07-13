@@ -6,15 +6,15 @@ _Newest first. Update at the END of every session: what changed, what's next, wh
 - Wired `raw_mean_scores` into `calibrate.assign` (deployable; reproduces D28 9/12 on 6 rooms), THEN validated
   on the whole-area 23-room candidate set (user chose the ~90min hard-regime test over the ~12h full-pano run).
   Branch `feat/rawmean-gate`. Code experiments/fgpl_seed/wholearea_{localize,capture,analysis}.py.
-- **RESULT (12 panos × 23 rooms):** raw min-loss recall 6/12 (misses ALL → hallway loss-sinks 2/5/6, D21 at
-  scale); CPO-loss gate prefix 2/12 recall 5/12; **raw-mean gate prefix 2/12 recall 6/12**. → D28's 6-room
-  advantage (3→9) DID NOT SURVIVE; both gates collapse to prefix 2/12 (raw-mean +1 recall = within noise). The
-  raw-mean win was a **6-room artifact** (only hallway_3 as loss-sink there; 23 rooms add many degenerate clouds).
-- **IMPLICATION:** whole-area room recall (the D26 problem) is NOT solved by ANY lever — v1 calibration /
-  robust-loss (D27) / raw-mean (D28) ALL ~2/12 confident-correct at 23 rooms. Need a genuinely DIFFERENT
-  approach: candidate PRE-FILTER to drop loss-sinks / scale-aware score tiny clouds can't game / cross-pano
-  consistency. Color POSITION seed (D25) still works WHEN room is right; room selection at scale = open hard
-  problem. See D29 + WHOLEAREA_RESULTS.md. Discipline: scale-validation caught the false lead pre-deploy.
+- **RESULT (12 panos × 23 rooms) — SCORE vs GATE:** uncalibrated recall CPO-loss 6/12 vs **raw-mean 8/12**
+  (raw-mean SCORE wins at scale — the D28 score advantage HOLDS); but +minmax gate prefix_correct = **2/12 for
+  BOTH** (D28's 6-room 3→9 *prefix* advantage does NOT survive — minmax calibration, tuned on 6 rooms, breaks
+  at 23 and hurts both: raw-mean 8→6). CPO min-loss misses all → hallway loss-sinks 2/5/6 (D21 at scale).
+- **IMPLICATION (corrected after review):** the raw-mean SCORE generalizes (best raw classifier, 8/12) — KEEP
+  it. The open problem RELOCATES to the CONFIDENCE GATE (minmax breaks at scale). NEXT = a better confidence
+  mechanism over raw-mean (drop/replace minmax at scale / scale-aware gate / candidate pre-filter to drop
+  loss-sinks). Robust parked (D27); color POSITION seed (D25) still works when room is right. See D29 +
+  WHOLEAREA_RESULTS.md. Discipline: scale-validation refined the lead (score holds, gate doesn't) pre-deploy.
 - Branch feat/rawmean-gate NOT yet finished (merge/keep pending).
 
 ## Current state (2026-07-13 latest — driver isolation: raw-mean advantage = match_color + weighting, NOT subsample, D28)
