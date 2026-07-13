@@ -359,7 +359,13 @@ Both methods share `calibrate.minmax_scores`; only the per-room score differs. E
 - **Caveats:** n=12; prefix_correct is a tail-sensitive metric; the a-vs-a′ gap conflates THREE differences
   (match_color, weighting, fixed-seed-0 subsample) so the causal factor is NOT yet isolated. Treat as a LEAD,
   not a deployed decision. residuals are raw/unweighted; the fidelity gate validates them vs `sampling_loss`
-  (exact, |diff|=0), NOT the weighted cache loss.
+  (exact, |diff|=0), NOT the weighted cache loss. (Precision note: a′ and every c-variant are computed on the
+  stored 101-pt percentile GRID, so a′ = mean-of-grid ≈ the per-point residual mean — a close estimate, and
+  identical treatment across a′/c keeps the mean-vs-robust comparison fair.)
+- Whole-branch review (opus, 37cdabc..d2aa0a5) = SOUND: D26+D27 numbers reproduced byte-for-byte; fairness/
+  no-third_party/comparison-validity/fidelity all hold; the never-task-reviewed D26 p1_cal wiring holds up
+  (uses `poses[room_cal]`, test-covered). NOTE for next session: 2 PRE-EXISTING `test_narrowing.py` reds
+  (scan2measure on `main` lacks the parked P2/P3 narrowing params) — not a regression from this work.
 - **NEXT:** (i) ISOLATE the driver — ablate match_color alone / weighting alone / subsample (cheap, reuses
   `residuals.json`); (ii) if raw-mean holds, wire a raw-residual room score into the gate and validate at
   larger n (the D26 (b) scaling lever, now with a better score to scale); (iii) robust-loss stays parked.
