@@ -14,6 +14,13 @@ def test_stat_values():
     assert abs(rs.robust_scores(grids, "trimmed_mean", k=0)["pA"]["r"] - 50.0) < 1.0
     assert abs(rs.robust_scores(grids, "trimmed_mean", k=50)["pA"]["r"] - 25.0) < 1.0
 
+def test_raw_mean_scores_is_grid_mean():
+    g = _grid([0.05] * 80 + [0.8] * 20)
+    grids = {"p": {"r": g}}
+    s = rs.raw_mean_scores(grids)["p"]["r"]
+    assert abs(s - rs.robust_scores(grids, "trimmed_mean", k=0)["p"]["r"]) < 1e-9
+    assert abs(s - (sum(g) / len(g))) < 1e-9   # == mean of the 101-pt grid
+
 def test_discrimination_true_room_beats_loss_sink():
     # true room: strong low core (most points match ~0.05) + minority window outliers (~0.8)
     true = _grid([0.05]*80 + [0.8]*20)

@@ -20,3 +20,12 @@ def robust_scores(grids, stat, **params):
     """grids: {pano: {room: [101 floats]}} -> {pano: {room: score}} (lower = better)."""
     return {p: {r: _stat(g, stat, **params) for r, g in rooms.items()}
             for p, rooms in grids.items()}
+
+
+def raw_mean_scores(grids):
+    """Recommended room-assignment gate score (D28): the RAW UNWEIGHTED per-room residual
+    mean (== mean of the residual grid, i.e. trimmed_mean k=0). On the D27/D28 subset this
+    beats CPO's deployed match_color+weighted loss on gate precision/coverage (confident-
+    correct prefix 3->9 of 12; D28 attributes the win to dropping match_color + weighting).
+    Feed to calibrate.assign for the deployable room assignment. Fair: reads only residuals."""
+    return robust_scores(grids, "trimmed_mean", k=0)
