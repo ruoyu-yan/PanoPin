@@ -335,3 +335,32 @@ the calibrated room; dropped the D25-dead p2/p3; re-ran (cpo_seeds 25min panopin
   ceiling-push thread, feat/robust-loss-ceiling) to fix loss-sinks WITHOUT breaking genuine corridors.
 - Code: `cpo_seeds.py` (per-room poses + calibrate), `seed_and_config.py` (p1_cal), `run_all.py` (4-arm),
   `tests/test_seed_and_config.py` (+p1_cal test, 10/10 green). Numbers in RESULTS.md "Calibration re-run".
+
+
+## D27 — Robust-loss does NOT beat the mean gate; but a RAW-unweighted residual mean beats CPO's match_color+weighted loss on gate precision (2026-07-13)
+Precision/coverage comparison (spec+plan docs/{specs,plans}/2026-07-13-robust-gate-comparison*; code
+`experiments/fgpl_seed/{robust_capture,robust_analysis}.py` + `src/panopin/robust_score.py` + adapter
+`residuals_at_pose`). Rule = **seed only when confident** (user) → metric = **prefix_correct** = panos the
+minmax gate can confidently AND correctly commit before the FIRST wrong room (= coverage at 100% precision).
+Both methods share `calibrate.minmax_scores`; only the per-room score differs. Executed subagent-driven
+(5 tasks, all reviews clean; the Task-4 analysis was independently re-run byte-for-byte by the reviewer).
+- **Results (n=12):** a = deployed CPO loss (match_color+weighted mean) **3/12**; a′ = raw *unweighted* mean
+  of the same per-point residuals at the same cached poses **9/12**; all robust variants (median / low-pct
+  @10,20,25 / trim-top @10,20,30) **8–9/12** (best 9, median 8). recall@1(all): a 8/12, a′/c 9/12.
+- **(1) ROBUSTNESS IS NOT THE LEVER:** best robust (c) ties a′ (9 vs 9). The spec §2 hypothesis — a robust
+  statistic separates true room from loss-sink better than the mean — is **REFUTED at n=12** on this subset.
+  Robust-loss is parked.
+- **(2) UNEXPECTED LEAD:** the plain **raw unweighted residual mean lifts the confidently-correct prefix
+  3→9** vs CPO's deployed match_color+weighted loss. Independently reviewed as a REAL effect (same pano, same
+  cached pose per (pano,room); the divergence is match_color+weighting distorting the minmax gate's per-room
+  normalization — consistent with the D21 loss-sink degeneracy). **The a′ baseline (added after the Task-2
+  match_color finding) was load-bearing:** without it the naive read is "robust beats deployed 9 vs 3," which
+  is WRONG — the gain is raw-vs-matchcolor+weighting, not mean-vs-robust.
+- **Caveats:** n=12; prefix_correct is a tail-sensitive metric; the a-vs-a′ gap conflates THREE differences
+  (match_color, weighting, fixed-seed-0 subsample) so the causal factor is NOT yet isolated. Treat as a LEAD,
+  not a deployed decision. residuals are raw/unweighted; the fidelity gate validates them vs `sampling_loss`
+  (exact, |diff|=0), NOT the weighted cache loss.
+- **NEXT:** (i) ISOLATE the driver — ablate match_color alone / weighting alone / subsample (cheap, reuses
+  `residuals.json`); (ii) if raw-mean holds, wire a raw-residual room score into the gate and validate at
+  larger n (the D26 (b) scaling lever, now with a better score to scale); (iii) robust-loss stays parked.
+  Numbers: `experiments/fgpl_seed/ROBUST_RESULTS.md`.

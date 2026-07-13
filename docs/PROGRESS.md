@@ -2,6 +2,24 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-13 later — robust-gate comparison: robust NOT the lever; raw-mean scoring IS a lead, D27)
+- Ran the precision/coverage comparison (spec+plan docs/{specs,plans}/2026-07-13-robust-gate-comparison*;
+  code experiments/fgpl_seed/{robust_capture,robust_analysis}.py + src/panopin/robust_score.py + adapter
+  residuals_at_pose + check_residual_fidelity). Executed subagent-driven (5 tasks, all reviews clean; Task-4
+  analysis independently re-run byte-for-byte by the reviewer). Branch feat/fgpl-seed-ablation, LOCAL.
+- Metric = prefix_correct (confidently+correctly committed before the FIRST wrong room; seed-only-when-confident).
+  **RESULT (n=12):** a deployed CPO loss (match_color+weighted) **3/12**; a′ raw-unweighted mean of the same
+  residuals **9/12**; robust variants **8–9/12** (best 9).
+- **(1) Robustness is NOT the lever** — best robust ties a′ (9=9); spec §2 hypothesis REFUTED at n=12. Parked.
+- **(2) Unexpected lead** — raw-unweighted residual mean lifts confident-prefix 3→9 vs CPO's match_color+weighted
+  loss (reviewer-confirmed real; match_color+weighting distorts the gate's per-room normalization, D21). The a′
+  baseline (added after the Task-2 match_color finding) was essential — naive read without it = "robust beats
+  deployed 9v3" = WRONG.
+- **Caveats:** n=12; prefix_correct is tail-sensitive; a-vs-a′ conflates match_color+weighting+subsample (driver
+  NOT isolated). LEAD not decision. See DECISIONS D27 + experiments/fgpl_seed/ROBUST_RESULTS.md.
+- **NEXT:** (i) isolate the driver (ablate match_color / weighting / subsample — cheap, reuses residuals.json);
+  (ii) if raw-mean holds, wire a raw-residual room score into the gate + validate at larger n; (iii) robust parked.
+
 ## Current state (2026-07-13 — wired v1 calibration into the seed; NEGATIVE result, D26)
 - **Executed the D25 next step** (branch feat/fgpl-seed-ablation, LOCAL, committed, NOT pushed): `cpo_seeds`
   now caches EVERY room's pose + the v1 minmax-calibrated room (`panopin.calibrate`); new `p1_cal` arm seeds

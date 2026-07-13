@@ -89,6 +89,13 @@ bit-reproducible (D1) and a fresh cache gave 8/12. Noise is large at n=12 — p1
 Salvageable piece = the confidence **gate** (3/3 confident correct at 25% coverage; correctly withholds
 both breaks) → use ABSTAIN-not-mis-seed, not wholesale room swap. See DECISIONS **D26**.
 
+## Follow-up (2026-07-13) — robust-gate comparison → see `ROBUST_RESULTS.md` (D27)
+
+Tested whether a robust per-point residual score beats the minmax gate on CPO's mean loss (precision/coverage,
+seed-only-when-confident). **Robustness did NOT help** (best robust ties the raw-mean baseline, 9/12 vs 9/12).
+**Unexpected lead:** a raw *unweighted* residual mean lifts the confidently-correct prefix 3→9 vs CPO's deployed
+match_color+weighted loss. Numbers + method in `experiments/fgpl_seed/ROBUST_RESULTS.md`; decision in D27.
+
 ## Reproduce
 
 ```
