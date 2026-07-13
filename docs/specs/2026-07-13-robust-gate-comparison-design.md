@@ -75,6 +75,15 @@ re-localization is needed. A capture script iterates the 72 (pano, room) pairs a
 **101-point percentile grid** (p0..p100) of the residual vector as JSON (`work/seeds/residuals.json`) — exact
 for median and any percentile, sufficient for trimmed-means over a percentile sub-range, tiny, no pickle.
 
+**Color space (found during Task 2):** these residuals are **raw** (no `match_color`) and **unweighted** —
+`residuals_at_pose` replicates only `sampling_loss.py:189-203`, which consume `img`/`rgb` as given, whereas
+CPO's *deployed* room score (the cached `per_room` mean, method a) is computed by `refine_pose_sampling_loss`
+over `match_color`-adjusted (`stanford_cpo.ini: match_color=True`), *weighted* colors. So the cached mean (a)
+differs from `mean(raw residuals)` on two axes (color space + weighting). To keep the mean→robust question
+clean, §6 adds a **raw unweighted-mean baseline a′** = `mean` of the same residual grid (`trimmed_mean k=0`):
+`c vs a′` isolates *aggregation* (identical raw residuals), while `c vs a` answers the *deployment* question.
+The `match_color`+weighted robust variant is a possible future refinement, not in this spec.
+
 **Fidelity validation (gate before trusting robust stats):** a check asserts that `mean(residuals_at_pose)`
 equals CPO's own `cpo.sampling_loss` scalar at the **same** pose to 1e-4 — an EXACT match, because both are
 the unweighted mean of `‖sample_rgb[mask] − cloud_rgb[mask]‖` over the same sampled points, so the replication
@@ -106,8 +115,10 @@ GT (experiments-side, allowed); 4. summarize each method by **coverage-at-100%-p
 
 Deliverable = a table + the two-curve overlay written to `experiments/fgpl_seed/ROBUST_RESULTS.md`:
 | method | score | cov@100%prec | cov@first-error | recall@1 (all) |
-Winner = highest cov@100%-precision. Report honestly if (c) does not beat (a) (very possible at n=12); note
-the n=12 noise caveat (D26) explicitly.
+covering (a) deployed mean-loss, (a′) raw unweighted mean, and the (c) robust variants. Two verdicts:
+**robustness isolated** = best (c) vs (a′) on identical raw residuals; **deployment** = best (c) vs (a).
+Winner = highest cov@100%-precision. Report honestly if (c) does not beat (a′)/(a) (very possible at n=12);
+note the n=12 noise caveat (D26) explicitly.
 
 ## 7. FGPL secondary check — DEFERRED (design call 2, confirmed)
 The primary decision is settled offline. A confident-correct-room seed already gives FGPL ≈ oracle pose
@@ -141,6 +152,10 @@ localize well — a follow-up arm, not part of this spec.
   is where PanoPin stands, and points to (b) scaling or a different mechanism.
 - **Cached poses are a bad realization** (Adam local min) → residuals high regardless. Accepted: the robust
   score reflects the same localization both methods see; this isolates *scoring*, not pose search (design call 1).
+- **Raw vs match_color residuals** (found in Task 2): robust scores use raw/unweighted residuals, not CPO's
+  deployed match_color+weighted score. Mitigation: the a′ raw-mean baseline isolates aggregation cleanly; the
+  a-vs-c deployment comparison carries this confound and is reported as such. If robust beats a′ but not a,
+  the match_color+weighted robust variant is the follow-up.
 
 ## 11. Reproduce (planned)
 ```

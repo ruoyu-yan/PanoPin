@@ -191,22 +191,19 @@ def residuals_at_pose(cfg, pano_path, cloud_path, t, R):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     sample_rate = getattr(cfg, 'sample_rate', 1)
 
+    np.random.seed(0)   # match pin()'s seed so this second read_txt_pcd reload draws the
+    # SAME random subsample (sample_rate>1 branch) the caller drew; no-op at sample_rate=1.
     xyz_np, rgb_np = data_utils.read_txt_pcd(cloud_path, sample_rate=sample_rate)
     xyz = torch.from_numpy(xyz_np).float().to(device)
     rgb = torch.from_numpy(rgb_np).float().to(device)
 
     orig_img = cv2.cvtColor(cv2.imread(pano_path), cv2.COLOR_BGR2RGB)
     orig_img = cv2.resize(orig_img, (2048, 1024))
-    sharpen_color = getattr(cfg, 'sharpen_color', False)
-    match_color = getattr(cfg, 'match_color', False)
-    num_bins = getattr(cfg, 'num_bins', 256)
-    if sharpen_color or match_color:
-        mod_img = (torch.from_numpy(orig_img).float() / 255.).to(device)
-        if match_color:
-            new_img = color_match(mod_img, rgb); orig_img = (255 * new_img.cpu().numpy()).astype(np.uint8)
-        if sharpen_color:
-            new_img, rgb = color_mod(mod_img, rgb, num_bins); orig_img = (255 * new_img.cpu().numpy()).astype(np.uint8)
-
+    # NOTE (corrected during Task 2): do NOT apply match_color/sharpen here. sampling_loss.py:189-203
+    # — the exact lines this replicates — consume img/rgb AS GIVEN; color-matching is upstream caller
+    # logic (localize_pair). stanford_cpo.ini sets match_color=True, so including it here diverges from
+    # the raw-img fidelity reference by ~1.1e-2. Residuals are therefore RAW/unweighted; see Task 4's a'
+    # raw-mean baseline (which isolates mean→robust on these same raw residuals).
     mdh = getattr(cfg, 'main_downsample_h', 1); mdw = getattr(cfg, 'main_downsample_w', 1)
     img = cv2.resize(orig_img, (orig_img.shape[1] // mdw, orig_img.shape[0] // mdh))
     img = (torch.from_numpy(img).float() / 255.).to(device)
@@ -375,6 +372,11 @@ def main():
 
     methods = [("a: mean-loss", {p: cache[p]["per_room"] for p in cache})]
     for stat, params, label in [
+        # a' = mean of the SAME raw residuals residuals_at_pose gives (trimmed_mean k=0). This
+        # is the clean baseline that isolates mean->robust: (a) is match_color+weighted (deployed),
+        # (a') is raw+unweighted like the robust variants, so c-vs-a' attributes any gain to
+        # ROBUST aggregation alone (not color-space/weighting differences).
+        ("trimmed_mean", {"k": 0}, "a': raw-mean"),
         ("median", {}, "c: median"),
         ("low_percentile", {"q": 10}, "c: low-pct@10"),
         ("low_percentile", {"q": 20}, "c: low-pct@20"),
@@ -395,10 +397,15 @@ def main():
         prefix, recall = curve(sm, true_room)
         results.append((label, prefix, recall))
         lines.append(f"| {label} | {prefix}/{n} ({100*prefix/n:.0f}%) | {recall}/{n} ({100*recall/n:.0f}%) |")
-    base = results[0][1]
-    best = max(results, key=lambda x: x[1])
-    lines.append(f"\n**Baseline (a) prefix_correct = {base}/{n}. Best = {best[0]} at {best[1]}/{n}.**")
-    lines.append(f"{'Robust BEATS the mean gate.' if best[1] > base and best[0] != results[0][0] else 'Robust does NOT beat the mean gate (n=12 is noisy, D26 caveat).'}")
+    by_label = {r[0]: r[1] for r in results}
+    a, a_raw = by_label["a: mean-loss"], by_label["a': raw-mean"]
+    robust = {r[0]: r[1] for r in results if r[0].startswith("c:")}
+    best_c_label = max(robust, key=lambda k: robust[k]); best_c = robust[best_c_label]
+    lines.append(f"\n**Deployed mean gate (a) = {a}/{n}; raw-mean (a') = {a_raw}/{n}; "
+                 f"best robust (c) = {best_c_label} at {best_c}/{n}.**")
+    lines.append(f"- Robustness isolated (same raw residuals): c {'BEATS' if best_c > a_raw else 'does NOT beat'} a' ({best_c} vs {a_raw}).")
+    lines.append(f"- Deployment: c {'BEATS' if best_c > a else 'does NOT beat'} the deployed match_color+weighted mean gate a ({best_c} vs {a}).")
+    lines.append("(n=12 is noisy — D26 caveat; treat small differences as within noise.)")
 
     out = "\n".join(lines) + "\n"
     print(out)
