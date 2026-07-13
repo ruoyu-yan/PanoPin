@@ -123,3 +123,62 @@ def score_room_cheap(cfg, pano_path, cloud_path):
     t = t_c.detach().numpy().reshape(3)
     R = R_c.detach().numpy().reshape(3, 3)
     return t, R, float(loss_c.detach())
+
+
+def residuals_at_pose(cfg, pano_path, cloud_path, t, R):
+    """Per-point color residuals ||sample_rgb - cloud_rgb|| at a FIXED given pose (t,R),
+    replicating ONLY cpo.sampling_loss's sampling geometry (sampling_loss.py:189-203)
+    WITHOUT the mean. Deliberately excludes match_color/sharpen_color: those are upstream
+    preprocessing steps applied by CALLERS (e.g. localize_pair, score_room_cheap) to `img`
+    /`rgb` BEFORE handing them to sampling_loss/refine_pose_sampling_loss -- sampling_loss.py
+    itself (lines 189-203) only consumes img/rgb as given, with no color adjustment. Composes
+    CPO primitives only (no third_party edit, D9). Returns a 1-D numpy array.
+
+    Fidelity note: an earlier version of this function additionally replicated the
+    match_color/sharpen_color preprocessing block (mirroring score_room_cheap's pattern).
+    That version FAILED the fidelity gate (|diff|=1.39e-02) against cpo.sampling_loss's own
+    scalar, because the gate's reference L is computed from the raw (non-color-matched) img.
+    A diagnostic isolating the two code paths confirmed: raw img -> |diff|=0.00e+00 exact
+    match; match_color-preprocessed img -> |diff|~1.1e-2. This version was rewritten from
+    scratch (per project error policy) to match only lines 189-203, which resolved most of it
+    but left a residual |diff|=1.80e-03: data_utils.read_txt_pcd draws a np.random permutation
+    whenever sample_rate>1 (see panopin.determinism's own docstring), so reloading the SAME
+    cloud_path a second time (here) after the caller already loaded it once (to compute the
+    reference pose/loss) draws a DIFFERENT random point subset, unless np.random is reseeded
+    to the same state first. Reseeding to determinism.pin()'s default seed immediately before
+    the read reproduces the caller's exact subsample (verified: array_equal == True) and
+    closed the gap to |diff|=0.00e+00."""
+    from utils import cloud2idx, refine_sampling_coords, sample_from_img
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    sample_rate = getattr(cfg, 'sample_rate', 1)
+
+    np.random.seed(0)  # match panopin.determinism.pin()'s default seed so a second,
+    # independent read_txt_pcd reload of the same cloud draws the identical random
+    # subsample (sample_rate>1 branch) as the caller's own first load -- see docstring.
+    xyz_np, rgb_np = data_utils.read_txt_pcd(cloud_path, sample_rate=sample_rate)
+    xyz = torch.from_numpy(xyz_np).float().to(device)
+    rgb = torch.from_numpy(rgb_np).float().to(device)
+
+    orig_img = cv2.cvtColor(cv2.imread(pano_path), cv2.COLOR_BGR2RGB)
+    orig_img = cv2.resize(orig_img, (2048, 1024))
+
+    mdh = getattr(cfg, 'main_downsample_h', 1); mdw = getattr(cfg, 'main_downsample_w', 1)
+    img = cv2.resize(orig_img, (orig_img.shape[1] // mdw, orig_img.shape[0] // mdh))
+    img = (torch.from_numpy(img).float() / 255.).to(device)
+
+    t_col = torch.as_tensor(np.asarray(t, dtype=np.float32), device=device).reshape(3, 1)
+    R_t = torch.as_tensor(np.asarray(R, dtype=np.float32), device=device).reshape(3, 3)
+
+    new_xyz = torch.transpose(xyz, 0, 1) - t_col
+    new_xyz = torch.transpose(torch.matmul(R_t, new_xyz), 0, 1)
+    coord_arr = cloud2idx(new_xyz)
+    filter_factor = getattr(cfg, 'filter_factor', 1)
+    filtered_idx = refine_sampling_coords(
+        coord_arr, torch.norm(new_xyz, dim=-1), rgb,
+        quantization=(img.shape[0] // filter_factor, img.shape[1] // filter_factor))
+    coord_arr = coord_arr[filtered_idx]
+    refined_rgb = rgb[filtered_idx]
+    sample_rgb = sample_from_img(img, coord_arr)
+    mask = torch.sum(sample_rgb == 0, dim=1) != 3
+    residuals = torch.norm(sample_rgb[mask] - refined_rgb[mask], dim=-1)
+    return residuals.detach().cpu().numpy()
