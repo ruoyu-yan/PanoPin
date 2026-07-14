@@ -1,6 +1,8 @@
 # Design — fusing PanoPin color candidates with FGPL geometry candidates
 
-**Date:** 2026-07-14 · **Branch:** `feat/candidate-fusion` (off `main`) · **Supersedes the active thread:** the D29
+**Date:** 2026-07-14 (rev. after literature review) · **Branch:** `feat/candidate-fusion` (off `main`) ·
+**Literature grounding:** `docs/geometry-color-fusion-literature-review.md` (§6–§8 below revised to its
+findings: verify-select over weighted blend; added joint refinement). · **Supersedes the active thread:** the D29
 "confidence gate over raw-mean at whole-area scale" problem is *deprioritised* — see §1 (deployment
 reframing). **Builds on:** D25 (color POSITION seed ≈ oracle when the room is right; FGPL handoff is
 positional-only; `C = [[0,0,1],[-1,0,0],[0,-1,0]]` rotation convention), D27/D28 (raw per-point residual
@@ -103,23 +105,42 @@ candidate.
 | **Setting the geom↔color weight** | Rank-based combine (§6) sidesteps unit mismatch (inlier *count* vs residual *meters*); one scalar `w` (or "color breaks geometric ties within margin") tuned on the dev subset. Per-room symmetry makes `w` interpretable. | Same combiner, but candidates are heterogeneous across rooms/rotations, so the rank distribution is messier to calibrate. |
 | **What's measurable at n=12** | Paired, same-pano comparison vs (i) geometry-only `p1`, (ii) color-only PanoPin, (iii) oracle. Can add trials by resampling room-subsets of size 3–5 from the 6 dev rooms (many (pano, room-set) draws) → more power than 12 raw panos. | Same metrics, but more free knobs (`top_k`, pooled-grid) make attribution of any gain harder at n=12. |
 
-## 6. The combination rule (shared by X and Y)
+## 6. The selection rule (revised to the literature)
 
-Geometric quality (`n_tight`, higher = better) and color residual (mean meters, lower = better) are
-different units, so **combine by rank, not raw sum**:
+The literature review changes the default here. The localization field's proven pattern (InLoc CVPR 2018,
+MegaPose CoRL 2022, Patch-NetVLAD, hloc) is **not** a weighted blend of the two scores — it is **"geometry
+proposes the ranked candidate pool; the render-and-compare score verifies/selects the winner"**, with the
+color score often the *decisive* selector (it may override the geometric ranking). Structure X's per-room
+FGPL search *is* the candidate generator; the fusion happens at selection. We test three selection rules,
+in this order (the F-menu from the review §6):
 
-1. Rank rooms/candidates by geometry (best `n_tight` = rank 0) and independently by color (lowest mean
-   residual = rank 0).
-2. `score = w · rank_geom + (1 − w) · rank_color`; pick the minimum. `w ∈ [0,1]` tuned on the dev subset
-   (sweep, pick the `w` that minimises median translation error; report sensitivity).
-3. **Deterministic, no learning** (charter-preferred). A rank tie falls back to geometry (the incumbent).
-4. **Color-confidence fallback:** if the pano's best-room color residual is not clearly separated from its
-   other-room residuals (spread below a margin → window/occlusion pano, D23), set `w → 1` for that pano
-   (trust geometry). This is a per-pano gate on *color's vote*, not the D24 room-abstention gate.
+- **F1 — verify-select (PRIMARY).** Among the per-room candidate poses, pick the one with the **lowest
+  color residual** (`residuals_at_pose` raw mean, D28). Color alone decides; geometry only defined the
+  pool. Targets wrong-room *and* rotation aliasing (color is neither same-shape-blind nor rotation-
+  invariant). Precedent: InLoc, MegaPose.
+- **F2 — rank/score blend (BRACKET).** Combine the geometric score (`n_tight`) and color score to check
+  whether keeping geometry's vote guards window/blank panos where F1 over-commits. Use **rank fusion**
+  (Reciprocal Rank Fusion, `score = Σ 1/(k+rank_i)`, k≈60, or Borda) — unit-free, no calibration — and/or
+  a **tanh-normalized equal-weight sum** (negate the color residual first). **No learned/tuned weight**:
+  at n=12 fixed rules beat trained combiners (Kuncheva 2004). The conservative end is **color as a pure
+  tie-breaker** among geometry's top candidates within a margin.
+- **F3 — reliability-weighted (DEFERRED).** Per-pano weight from a cheap reliability signal (color:
+  residual spread / window fraction; geometry: inlier margin). Only if F1/F2 show reliability varies and
+  matters. Precedent: Nandakumar quality-based fusion, mixture-of-experts.
 
-Special case worth testing: **color as a pure tie-breaker** — take geometry's top rooms/candidates within
-a margin of the best `n_tight`, break ties by color. This is `w`≈1 with a color tie-break and is the most
-conservative fusion (never overrides confident geometry); a good safety baseline to bracket the sweep.
+**Confidence (folds in the old D29 gate):** the F1/F2 selection *margin* (gap between the best and
+second-best candidate score) is the seed-or-abstain signal — soft/probabilistic selection (DSAC,
+FAB-MAP), replacing the minmax gate that broke at scale.
+
+## 6b. Joint color+geometry refinement (F4 — additive fine stage)
+
+Independent of selection, add a colored-ICP-style **joint refinement** of the *continuous* pose after the
+winner is chosen: minimize `E = w_g·E_line + w_c·E_color`, coarse-to-fine, with a robust kernel on each
+term and the weight set from residual covariance (Gutiérrez-Gómez 2015) rather than guessed. `E_color` =
+PICCOLO's differentiable sampling loss (already available); `E_line` = FGPL's line-alignment residual.
+This targets the **90° rotation aliasing** that persists even with a perfect position seed (RESULTS.md
+oracle rot median 90°) — the one failure neither cue fixes alone and FGPL's line-only refine cannot.
+Precedent: Colored ICP (Park 2017), SVO cascade, Gutiérrez-Gómez covariance weighting.
 
 ## 7. Recommendation
 
@@ -134,14 +155,23 @@ as a documented alternative only if X's per-room cost proves prohibitive (it sho
 
 ## 8. Validation plan (n=12 dev subset as the realistic proxy)
 
-- **Arms:** `geom_only` (current p1, geometry-selected), `color_only` (PanoPin min-residual room →
-  its FGPL pose), `fusion_X` (§4/§6), `oracle` (GT position seed). All scored by `eval/metrics` vs GT.
-- **Primary metric:** translation error median + wrong-room rate, paired per pano.
-- **Rotation:** report whether fusion cuts the 90°-aliased rotations (the §2 bonus) — score candidate
-  *rotations* by color, not only the geometric best.
-- **`w` sweep** on the 6-room subset; report the tie-break (`w`≈1) safety baseline alongside the tuned `w`.
+**Test order F1 → F2 → F4** (user-approved 2026-07-14), staged so we learn between each.
+
+- **Fixed reference arms** (all scored by `eval/metrics` vs GT, paired per pano):
+  `geom_only` (current p1, FGPL geometry-selected), `color_only` (PanoPin min-residual room → its FGPL
+  pose), `oracle` (GT position seed).
+- **F1 arm** `fusion_verify_select`: Structure-X per-room candidate pool → lowest-color-residual pick.
+  Primary question: does color-picks-winner beat `geom_only` and approach `oracle`?
+- **F2 arm(s)** `fusion_rrf` / `fusion_tanhsum` / `fusion_tiebreak`: does keeping geometry's vote help vs
+  F1, especially on the window/blank panos where color-alone should over-commit? No learned weight.
+- **F4 arm** `fusion_joint_refine`: F1 winner + joint color+geometry refinement. Question: does it cut the
+  rotation error (report rotation median, not just translation), and does it hold translation?
+- **Primary metric:** translation-error median + wrong-room rate; **rotation median** promoted to primary
+  for F4 (that is what it targets).
 - **Power:** resample 3–5-room subsets from the 6 dev rooms for extra (pano, room-set) trials; still flag
-  n as small (the D26/D29 discipline — no over-claiming from a handful of panos).
+  n as small (D26/D29 discipline — no over-claiming from a handful of panos).
+- **Blocking pre-check (R1):** before any fusion number, verify the frame conversion `R_wc = Cᵀ·Rp` — an
+  oracle-GT-posed pano must yield a *low* color residual. If not, fix the convention first.
 - **Fairness (D5):** `src/panopin/*` reads only manifest/residuals; GT used only in the oracle/scoring
   arms under `experiments/`.
 
