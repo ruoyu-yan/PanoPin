@@ -2,6 +2,22 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-14 latest4 — larger-n validation CONFIRMS D30+D32; deployable seeder shipped, D33; branch feat/deploy-regime)
+- User greenlit "validate on more panos, then wire in." Built a diverse 8-room pool (office/hallway/lounge/
+  conference/WC) with all in-frame panos = **32 panos** (2.7x n), localized each vs all 8 rooms (~99 min GPU),
+  captured residual grids, re-ran D30/D32 metrics over 3..8-room subsets. Code
+  `experiments/fgpl_seed/largeval{,_localize,_capture,_analysis}.py`; LARGEVAL_RESULTS.md; D33.
+- **RESULT — CONFIRMED (real loss-sink present: hallway_1, raw CPO recall 19/32):** low-pct per-pano recall
+  78-85% beats CPO 59-74% at every k (D30 HOLDS); **room-anchored coverage 100% AND winner-gate@precision1
+  100% at ALL k in {3..8}** (D32 reproduces beyond n=12, on diverse rooms, WITH a loss-sink).
+- **SHIPPED the deployable hand-off:** `src/panopin/seed.py` `seed_rooms(panos, candidate_clouds)` ->
+  `{room: RoomSeed(room,pano,t,R,score)}` + per-pano confidence; composes localize_pair -> residuals_at_pose
+  -> low_percentile_scores -> room_anchored_seeds. Pure assembly unit-tested (tests/test_seed.py 3/3).
+- **Net:** PanoPin deployment perf = ~100% per-room coverage at precision 1.0; per-pano ceiling (78-85%) does
+  NOT bind deployment. Caveat: still Area_3 only (cross-area = the open generalization question).
+- **NEXT:** wire `seed.seed_rooms` into the FGPL runner input (per-room demo6_alignment.json seeds) so the
+  real Scan2BIM pipeline consumes it; optional cross-area check. Branch feat/deploy-regime = 4 commits (D30-D33).
+
 ## Current state (2026-07-14 latest3 — reframe SOLVES deployment: per-room coverage 100% @ precision 1.0, D32; branch feat/deploy-regime)
 - Executed the D31 reframe: tested per-ROOM coverage (the real all-covered-deployment metric) offline on
   low-pct q20 scores, both caches. `experiments/fgpl_seed/deploy_regime_coverage.py`; COVERAGE_RESULTS.md; D32.

@@ -518,3 +518,27 @@ in the all-covered regime. Tested offline on the low-pct q20 scores, both caches
 - **Caveat:** n=12. **NEXT:** larger-pano GPU validation of the coverage/gate claim; then wire
   `coverage.room_anchored_seeds(low_percentile_scores(...))` into the deployable seed path
   (`cpo_seeds`/`select_room`) for the FGPL hand-off.
+
+## D33 — Larger-n validation (n=32, 8 diverse rooms, real loss-sink): D30+D32 CONFIRMED; deployable seeder shipped (2026-07-14)
+**Context.** n=12 was under-powered. Built a diverse 8-room pool (office/hallway/lounge/conference/WC)
+with all in-frame panos = 32 (2.7x n), localized each pano vs all 8 rooms (~99 min GPU), captured
+residual grids, and re-ran the D30/D32 metrics over 3..8-room all-covered subsets. Code
+`experiments/fgpl_seed/largeval{,_localize,_capture,_analysis}.py`; LARGEVAL_RESULTS.md.
+- **Real stress test:** raw CPO min-loss recall = 19/32; **hallway_1 is the new loss-sink** (captures
+  ~3 impostors) — the pool is not benign.
+- **Per-pano (D30 HOLDS):** low-pct 78-85% beats CPO-loss 59-74% at EVERY k (by ~11-19 pts); the
+  low-pct advantage widens at larger n.
+- **Per-ROOM coverage (D32 CONFIRMED):** **room-anchored 100% AND winner-gate@precision1 100% at ALL
+  k in {3,4,5,6,7,8}** — the deployment claim reproduces beyond n=12, on new diverse rooms, WITH a
+  loss-sink present. room-anchored self-seeds each room with its genuine best-matching pano; the
+  loss-sink attracts panos under per-pano argmin but never wins the room-anchored contest.
+- **SHIPPED the deployable hand-off:** `src/panopin/seed.py` `seed_rooms(panos, candidate_clouds)` ->
+  `{room: RoomSeed(room, pano, t, R, score)}` + per-pano confidence, composing localize_pair ->
+  residuals_at_pose -> low_percentile_scores (D30) -> room_anchored_seeds (D32). Pure assembly
+  (`seeds_from_scores`) unit-tested without GPU (tests/test_seed.py, 3/3). This is the validated
+  PanoPin->FGPL seed: one correct coarse seed per room.
+- **Net:** PanoPin's deployment performance = **~100% per-room coverage at precision 1.0**; per-pano
+  recall (78-85%) is the color-only ceiling (D31) and does NOT bind deployment. Caveat: still one area
+  (Area_3); cross-area validation is the remaining generalization question.
+- **NEXT:** wire `seed.seed_rooms` into the FGPL runner input (demo6_alignment.json per-room seeds) so
+  the real Scan2BIM pipeline consumes it; optional cross-area check.
