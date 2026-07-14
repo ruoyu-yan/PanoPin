@@ -25,6 +25,10 @@ fixed-pose color-verify fusion is REFUTED on this subset.**
    **0.323** (median 0.427); the Task-1 genuine-lock floor at the *true* GT pose is **~0.12–0.18**. FGPL's
    coarse candidate poses — especially their **Manhattan-aliased rotations** (RESULTS.md: even an
    oracle-seeded FGPL rotation is ~90° off) — never let the true room's color residual drop to a lock.
+   **Direct rotation-isolation evidence** (3 covered panos, at the *exact GT position*): GTpos+GTrot =
+   0.21/0.17/0.24 (locks), but GTpos+**FGPLrot** = 0.43/0.38/0.36 — swapping in FGPL's aliased rotation
+   *alone* (position held at GT) doubles the residual and destroys the lock. So the culprit is FGPL's
+   rotation, not position and not the convention (GT rotation locks → the Rp-as-is convention is correct).
 2. **Color-loss-sink degeneracy returns.** With no genuine lock anywhere, one room's cloud gives the
    lowest residual for almost everyone: **argmin-color picks `office_5` for 7 of 12 panos regardless of
    the true room.** (Task 5 independently: only 4 of 6 rooms ever win nearest-centroid.) This is the same
