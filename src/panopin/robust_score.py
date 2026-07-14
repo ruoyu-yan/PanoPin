@@ -23,9 +23,28 @@ def robust_scores(grids, stat, **params):
 
 
 def raw_mean_scores(grids):
-    """Recommended room-assignment gate score (D28): the RAW UNWEIGHTED per-room residual
-    mean (== mean of the residual grid, i.e. trimmed_mean k=0). On the D27/D28 subset this
-    beats CPO's deployed match_color+weighted loss on gate precision/coverage (confident-
-    correct prefix 3->9 of 12; D28 attributes the win to dropping match_color + weighting).
-    Feed to calibrate.assign for the deployable room assignment. Fair: reads only residuals."""
+    """RAW UNWEIGHTED per-room residual mean (== mean of the residual grid, i.e. trimmed_mean
+    k=0). Beats CPO's deployed match_color+weighted loss on the D27/D28 gate metric. Superseded
+    for room assignment by `low_percentile_scores` (D30): the mean lets a loss-sink room's low
+    core drag its score down via the good-point majority, so window/occlusion panos flip to the
+    sink. Kept for the D28 reproduction. Fair: reads only residuals."""
     return robust_scores(grids, "trimmed_mean", k=0)
+
+
+DEPLOY_Q = 20   # low-percentile pin: stable plateau q in [5,25] (deploy_regime_qpin, D30)
+
+def low_percentile_scores(grids, q=DEPLOY_Q):
+    """RECOMMENDED deployable room-assignment score (D30): the q-th percentile of a room's
+    per-point residuals -- "how well do the best-matching q% of points align". The true room
+    has a strong low core (many well-matched points); a loss-sink room matches mediocrely
+    everywhere, so its best q% is still worse. This suppresses the loss-sink tail that raw-mean
+    lets the sink exploit.
+
+    Validated OFFLINE on TWO independent pose caches (deploy_regime / _xcheck / _qpin):
+    dominates raw-mean and CPO-loss at every candidate-set size k in {3..6, 23}; the advantage
+    GROWS with room count (loss-sink risk); a WIDE stable plateau over q in [5,25] (not an
+    n=12 overfit). Unlike calibrate.assign it needs NO cross-pano stats -- it scores each pano
+    INDEPENDENTLY, so it fits the fast per-pano coarse-seed mandate and works with few panos.
+    Feed straight to argmin (calibration adds ~nothing on top -- deploy_regime_gate, Q4).
+    Fair: reads only residuals, no GT (D5). Caveat: n=12; a larger-pano GPU run should confirm."""
+    return robust_scores(grids, "low_percentile", q=q)

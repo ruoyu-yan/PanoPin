@@ -21,6 +21,19 @@ def test_raw_mean_scores_is_grid_mean():
     assert abs(s - rs.robust_scores(grids, "trimmed_mean", k=0)["p"]["r"]) < 1e-9
     assert abs(s - (sum(g) / len(g))) < 1e-9   # == mean of the 101-pt grid
 
+def test_low_percentile_scores_default_q_and_supersedes_mean():
+    # true room: strong low core + window outliers; loss-sink: mediocre everywhere.
+    true = _grid([0.05] * 80 + [0.8] * 20)
+    sink = _grid([0.30] * 100)
+    grids = {"p": {"true": true, "sink": sink}}
+    # default pin q=DEPLOY_Q must equal an explicit low_percentile at that q.
+    lp = rs.low_percentile_scores(grids)["p"]
+    assert lp == rs.robust_scores(grids, "low_percentile", q=rs.DEPLOY_Q)["p"]
+    # low-pct assigns the true room; raw-mean flips to the loss-sink (mean 0.20 core vs 0.30 hidden
+    # by the 0.8 window tail -> true mean ~0.20+ vs sink 0.30, but the window mass narrows it).
+    assert min(lp, key=lambda r: lp[r]) == "true"
+
+
 def test_discrimination_true_room_beats_loss_sink():
     # true room: strong low core (most points match ~0.05) + minority window outliers (~0.8)
     true = _grid([0.05]*80 + [0.8]*20)

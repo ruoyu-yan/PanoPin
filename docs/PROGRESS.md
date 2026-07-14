@@ -2,6 +2,25 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-14 latest — deployment-regime characterization + low-percentile room score, D30; branch feat/deploy-regime)
+- User: "continue improving the performance." Acted on the accepted refocus (validate the realistic 3–5-room
+  ALL-COVERED regime + better room score) — **entirely OFFLINE** by rescoring the cached whole-area residual
+  grids (12 panos × 23 rooms, 101 percentiles/pair) restricted to subsets of the 6 covered rooms. No GPU.
+  Fidelity check reproduces WHOLEAREA (k=23: CPO 6/12, raw-mean 8/12). Scripts
+  `experiments/fgpl_seed/deploy_regime{,_xcheck,_qpin,_gate}.py`; synthesis `DEPLOY_REGIME.md`; D30.
+- **Findings:** (Q1) the deployment regime is far easier — raw-mean recall **85–88%** at 3–5 covered rooms vs
+  67% at 23. (Q2) **low-percentile (best-matching q% of points) is the best per-room score and the ONLY robust
+  stat that CROSS-VALIDATES on the independent 6-room cache** (75% vs raw-mean 67% at k=6; median/trimmed are
+  cache-specific → rejected); advantage grows with room count; WIDE q-plateau [5,25] → pinned **q=20**. (Q3)
+  remaining bottleneck = **hallway_3 loss-sink capture**. (Q4) low-pct needs **no calibration** — reaches the
+  minmax ceiling with plain per-pano argmin (fits the fast per-pano mandate).
+- **Shipped:** `robust_score.low_percentile_scores(grids, q=20)` (+ test, 4/4 green) — the recommended
+  deployable room score, superseding `raw_mean_scores` for assignment. Reopens D27/D29 (robustness IS a lever
+  for RECALL; D27 tested median/trimmed on the gate metric and missed low-pct-for-recall).
+- **Caveat:** n=12 (1–2-pano flips). **NEXT:** (a) larger-pano GPU validation of low-pct; (b) rewire
+  `select_room`/`cpo_seeds` room ranking to low-percentile of `residuals_at_pose`; (c) attack the hallway_3
+  loss-sink directly (candidate pre-filter / loss-sink detector). Branch feat/deploy-regime NOT yet merged.
+
 ## Current state (2026-07-13 latest — whole-area validation: raw-mean advantage does NOT generalize, D29; recall bottleneck at scale UNSOLVED)
 - Wired `raw_mean_scores` into `calibrate.assign` (deployable; reproduces D28 9/12 on 6 rooms), THEN validated
   on the whole-area 23-room candidate set (user chose the ~90min hard-regime test over the ~12h full-pano run).

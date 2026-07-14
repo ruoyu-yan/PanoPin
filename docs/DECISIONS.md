@@ -441,3 +441,31 @@ Localize 12×23 = 104 min GPU (incremental-save); residuals at those poses; code
 - **Discipline note:** whole-area validation CAUGHT a false lead (the 6-room D28 result) before it was
   deployed — exactly why "validate at scale before wiring in" mattered. Caveat: n=12 (prefix tail-sensitive),
   but the 9→2 collapse is far larger than the run-to-run noise.
+
+## D30 — Deployment-regime characterization: recall 85–92% at 3–5 covered rooms; low-percentile (q=20) is the deployable room score (2026-07-14)
+**Context.** User reframed deployment (2026-07-14): real input = a 3–5 room cloud, EVERY room covered by ≥1 pano
+— NOT 12 panos vs all 23 rooms. Rescored the cached whole-area residual grids (12×23, 101 percentiles/pair)
+restricted to subsets of the 6 covered rooms — fully OFFLINE, no GPU. Fidelity check reproduces WHOLEAREA
+(k=23: CPO 6/12, raw-mean 8/12). Scripts: `experiments/fgpl_seed/deploy_regime{,_xcheck,_qpin,_gate}.py`;
+synthesis in `DEPLOY_REGIME.md`.
+- **The deployment regime is far easier than whole-area:** raw-mean recall at k=3–5 covered rooms = **85–88%**
+  (vs 67% at 23 rooms). So the reframing materially improves the real target metric.
+- **Low-percentile is the best per-room score AND it cross-validates.** On the whole-area cache median /
+  trimmed-mean / low-pct all hit 92% (k≤6), but on the INDEPENDENT 6-room cache (`residuals.json`) only
+  **low-percentile generalizes**: 75% vs raw-mean 67% at k=6; median/trimmed revert to baseline (cache-specific
+  — NOT adopted). low-pct's advantage GROWS with room count (loss-sink signature). q-pin = a WIDE plateau
+  q∈[5,25] (identical recall; q≥30 reverts) → not an n=12 knife-edge. Pinned **q=20**.
+- **Mechanism:** low-pct scores "how well the best-matching q% of points align". The true room has a strong
+  low core; a loss-sink matches mediocrely everywhere so its best q% is still worse. It rescues office_5 from
+  the hallway_3 loss-sink (6-room cache 8/12→9/12).
+- **Remaining bottleneck = hallway_3 loss-sink capture** (3 deeper captures survive low-pct) — the next lever.
+- **low-pct needs NO calibration (Q4):** minmax calibration lifts the loss-sink-degenerate CPO-loss a lot
+  (whole-area 83→92%) and raw-mean modestly, but adds ~nothing on top of low-pct. **low-pct q20 + plain argmin**
+  reaches the calibration ceiling scoring each pano INDEPENDENTLY (no cross-pano stats) — fits the fast
+  per-pano coarse-seed mandate and works with few panos. This partly reopens D27/D29: robustness IS a lever for
+  RECALL (D27 tested median/trimmed on the gate-prefix metric and missed the low-percentile-for-recall win).
+- **Shipped:** `robust_score.low_percentile_scores(grids, q=20)` (+ test) — the recommended deployable room
+  score, superseding `raw_mean_scores` for assignment. Caveat: **n=12** (1–2-pano flips); a larger-pano GPU run
+  should confirm before the deployable `select_room`/`cpo_seeds` swap.
+- **NEXT:** (a) larger-n GPU validation of low-pct; (b) rewire `select_room`/`cpo_seeds` room ranking to
+  low-percentile of `residuals_at_pose`; (c) attack the hallway_3 loss-sink directly (pre-filter / detector).
