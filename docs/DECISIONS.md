@@ -469,3 +469,29 @@ synthesis in `DEPLOY_REGIME.md`.
   should confirm before the deployable `select_room`/`cpo_seeds` swap.
 - **NEXT:** (a) larger-n GPU validation of low-pct; (b) rewire `select_room`/`cpo_seeds` room ranking to
   low-percentile of `residuals_at_pose`; (c) attack the hallway_3 loss-sink directly (pre-filter / detector).
+
+## D31 — Loss-sink attack REFUTED: the sink is a symptom of weak-lock (D23) panos, not the cause; per-pano vs joint assignment both no-op (2026-07-14)
+**Context.** D30 localized hallway_3 as the dominant miss. User delegated the architecture choice
+("try both and compare"). Probed separability, then compared per-pano-relative (minmax, rel_median,
+rel_q25) vs JOINT (per-room rank) assignment over the low-pct q20 score matrix, offline on both
+caches. Scripts `experiments/fgpl_seed/loss_sink_probe.py` + `deploy_regime_sink.py`; LOSS_SINK_RESULTS.md.
+- **loss_sink_probe:** the sink IS separable in isolation — hallway_3's true panos score 0.064-0.071
+  vs impostors 0.081-0.120 at the sink. BUT the whole-area cache has NO sink (low-pct already solved
+  it) — the sink is partly CPO run-to-run noise (±0.02).
+- **Comparison result — NEITHER architecture net-improves recall:** minmax / rel_median / rel_q25
+  (per-pano) AND rank (joint) all land at plain low-pct **argmin** (75% 6-room / 92% whole-area).
+- **Decisive diagnosis (full k=6 assignment):** removing the sink's pull moves the 3 impostors OFF
+  hallway_3 but into OTHER WRONG rooms (870532d7 office_4->office_7; 0e30c45e office_7->office_6/
+  hallway_3) — NEVER their true room. **The sink is a SYMPTOM of the miss, not its cause.**
+- **Root cause = weak ABSOLUTE color lock:** the 3 impostors match their own true room at low-pct
+  0.15-0.25 vs ~0.06-0.08 for clean panos — the **D23 window/occlusion hard floor** (~1/3 of panos
+  can't self-localize). No score-matrix normalization/assignment recovers a room the color signal
+  does not support. (Reproduces D26/D29 "calibration trades misses" at the mechanism level.)
+- **Implication:** **low-pct argmin (D30) is the CEILING for color-only room assignment.** Shipped
+  nothing (no sink method works). Further recall needs either (a) a NON-color cue (geometry/rotation)
+  for weak-lock panos, or (b) a CONFIDENCE GATE that ABSTAINS on weak-lock panos — which, in the
+  all-covered deployment (>=1 pano/room), still yields full per-ROOM coverage via each room's strong
+  panos. **Per-pano recall is not the deployment metric; per-room COVERAGE is.**
+- **NEXT (reframe):** stop optimizing per-pano recall; test the gate/coverage criterion — with a
+  confidence signal (low-pct score / margin), is there a confident subset that is (a) high-precision
+  and (b) covers every room? That is the real all-covered-deployment success metric. Offline-testable.

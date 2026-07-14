@@ -2,6 +2,23 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-14 latest2 — loss-sink attack REFUTED, D31; sink is a symptom of weak-lock panos; reframe to gate/coverage)
+- User delegated the architecture choice for the loss-sink attack ("try both and compare"). Compared
+  per-pano-relative (minmax / rel_median / rel_q25) vs JOINT (per-room rank) assignment over the low-pct
+  q20 score matrix, offline on both caches. Scripts `experiments/fgpl_seed/loss_sink_probe.py` +
+  `deploy_regime_sink.py`; LOSS_SINK_RESULTS.md; D31. Branch feat/deploy-regime.
+- **RESULT — REFUTED:** neither architecture net-improves recall (all == plain low-pct argmin, 75% 6-room /
+  92% whole-area). Full-assignment diagnosis: removing hallway_3's pull relocates the 3 impostors to OTHER
+  wrong rooms, never their true room. **The sink is a SYMPTOM, not the cause.** Root cause = weak ABSOLUTE
+  color lock (impostors 0.15-0.25 vs clean 0.06-0.08) = the D23 window/occlusion hard floor (~1/3 of panos).
+- **Ceiling:** low-pct argmin (D30) IS the color-only room-assignment ceiling. Shipped nothing (no sink
+  method works — the comparison the user asked for came back negative, cleanly).
+- **REFRAME (the real lever):** per-pano recall is NOT the deployment metric — per-ROOM COVERAGE is. In the
+  all-covered deployment (>=1 pano/room), a CONFIDENCE GATE that abstains on weak-lock panos still localizes
+  every room via its strong panos. **NEXT = test the gate/coverage criterion offline** (confidence signal =
+  low-pct score / margin; is there a confident subset that is high-precision AND covers every room?). Non-
+  color geometry cue is the alternative if the gate can't cover a room. Branch feat/deploy-regime NOT merged.
+
 ## Current state (2026-07-14 latest — deployment-regime characterization + low-percentile room score, D30; branch feat/deploy-regime)
 - User: "continue improving the performance." Acted on the accepted refocus (validate the realistic 3–5-room
   ALL-COVERED regime + better room score) — **entirely OFFLINE** by rescoring the cached whole-area residual
