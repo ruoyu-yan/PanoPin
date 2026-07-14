@@ -65,11 +65,14 @@ D28) returns the per-point color residuals `‖sample_rgb − cloud_rgb‖` at a
 projection, **no search, no Adam**. Its raw mean is the D28-best color score. So scoring an
 FGPL-produced candidate pose by color is cheap (§5).
 
-**Frame/convention interface (must be exact).** FGPL emits `Rp = C @ R_wc`. `residuals_at_pose` expects
-`R = world→camera = R_wc`, so feed **`R_wc = Cᵀ · Rp`** (`C = [[0,0,1],[-1,0,0],[0,-1,0]]`, D25) and
-`t = t_world` as-is. Everything runs in the raw S3DIS frame (identity metadata, ~5 mm frame identity per
-Point_360), so cloud and FGPL pose already share a frame. This conversion is the one sharp edge; the plan
-must verify it on the oracle arm (a GT-posed pano must yield a *low* color residual).
+**Frame/convention interface (must be exact — DERIVED empirically 2026-07-14, not guessed).** FGPL emits
+`Rp = C @ R_wc` (`C = [[0,0,1],[-1,0,0],[0,-1,0]]`, D25). `residuals_at_pose` expects the **equirect-
+convention** rotation `C @ R_wc` — CPO and FGPL share this convention (same lab) — so **feed `R = Rp`
+AS-IS** (this corrects an earlier draft that said `Cᵀ·Rp`). For a GT pose, feed `R = C · R_cwᵀ`. `t =
+t_world` as-is. Everything runs in the raw S3DIS frame (identity metadata, ~5 mm frame identity per
+Point_360). The blocking R1 pre-check verified this: `fusion_convention_probe.py` swept all natural
+compositions and `C·R_cwᵀ` alone landed at the CPO genuine-lock floor (~0.12–0.18) vs ~0.40–0.46 for the
+rest; the gate then passed 12/12 (GT residual < sibling, median 0.184).
 
 ## 4. The two fusion structures
 
@@ -177,8 +180,8 @@ as a documented alternative only if X's per-room cost proves prohibitive (it sho
 
 ## 9. Risks and open questions
 
-- **R1 — rotation-frame conversion (§3).** If `R_wc = Cᵀ·Rp` is wrong, color scores are garbage. Gate:
-  oracle-posed pano must give a low residual before trusting any fusion number. (Blocking check in the plan.)
+- **R1 — rotation-frame conversion (§3). RESOLVED 2026-07-14:** the color feed is `R = Rp` as-is (GT: `C·R_cwᵀ`),
+  derived empirically (`fusion_convention_probe.py`); the blocking gate passed 12/12 (median GT residual 0.184).
 - **R2 — FGPL rotation aliasing pollutes color scores.** If FGPL's *geometric* best pose per room is
   90°-rotated, its color residual is high even for the right room. Mitigation: color-score *all* of FGPL's
   `top_k` rotations per room and take the room's best — turns R2 from a risk into the §2 bonus.

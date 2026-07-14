@@ -15,7 +15,7 @@
 - **No learned fusion (charter + Kuncheva 2004):** all selection rules are deterministic; at n=12 fixed rules beat trained combiners.
 - **Determinism:** call `panopin.determinism.pin()` before any CPO call (single-thread + seed); CPO is not bit-reproducible on CPU (~±0.02, D1).
 - **Envs (never mix):** estimator + CPO/`residuals_at_pose` → `panopin-gpu` (`paths.ESTIMATOR_ENV`/`paths.GPU_ENV`); PanoPin unit tests → `panopin`.
-- **Frame conventions (fixed, D25):** FGPL emits rotation `Rp = C @ R_wc`, `C = [[0,0,1],[-1,0,0],[0,-1,0]]`. To color-score an FGPL pose, `residuals_at_pose` needs world→camera `R_wc = Cᵀ · Rp`. To score vs GT, camera→world `R_cw = Rpᵀ · C` (that is `run_all._fgpl_rot_to_cw`). A GT pose has `R_cw` directly, so its `R_wc = R_cwᵀ`.
+- **Frame conventions (fixed, D25; color feed DERIVED empirically in Task 1, `fusion_convention_probe.py`):** FGPL emits rotation `Rp = C @ R_wc`, `C = [[0,0,1],[-1,0,0],[0,-1,0]]`. `residuals_at_pose` expects the **equirect-convention** rotation `C @ R_wc` (CPO and FGPL share this convention — same lab). So **to color-score an FGPL pose, feed `R = Rp` AS-IS** (no conversion — this corrects the plan's original `Cᵀ·Rp`). To color-score a GT pose, feed `R = C · R_cwᵀ`. To *score vs GT* (a separate step), convert an FGPL pose to camera→world `R_cw = Rpᵀ · C` (that is `run_all._fgpl_rot_to_cw`); GT poses are already `R_cw`.
 - **`panopin` not pip-installed:** experiment scripts prepend `src/` and repo root to `sys.path` (mirror `cpo_seeds.py:12-14`).
 - **`work/` is gitignored:** commit only code + the committed `FUSION_RESULTS.md`.
 
@@ -70,6 +70,8 @@ from panopin.determinism import pin
 from panopin.cpo_config import load_cfg
 from panopin.cpo_adapter import residuals_at_pose
 
+C = np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]], float)   # equirect signed-perm (D25)
+
 
 def main(sample_rate=30):
     pin()
@@ -82,10 +84,10 @@ def main(sample_rate=30):
         name, room = r["pano_name"], r["room"]
         loc = gt[name]["location"]
         R_cw = np.array(gt[name]["R_cw"], float)
-        R_wc = R_cw.T                                   # world->camera for residuals_at_pose
-        gt_res = float(residuals_at_pose(cfg, r["pano_jpg"], clouds[room], loc, R_wc).mean())
+        R_feed = C @ R_cw.T                             # equirect convention (C const; derived in probe)
+        gt_res = float(residuals_at_pose(cfg, r["pano_jpg"], clouds[room], loc, R_feed.tolist()).mean())
         sib = sc.SIBLING[room]
-        wrong_res = float(residuals_at_pose(cfg, r["pano_jpg"], clouds[sib], loc, R_wc).mean())
+        wrong_res = float(residuals_at_pose(cfg, r["pano_jpg"], clouds[sib], loc, R_feed.tolist()).mean())
         out[name] = {"gt_color": gt_res, "wrong_color": wrong_res, "room": room, "sibling": sib}
         print(f"{name} {room:11s} gt={gt_res:.4f}  wrong({sib})={wrong_res:.4f}  "
               f"{'OK' if gt_res < wrong_res else 'X'}", flush=True)
@@ -384,17 +386,18 @@ git commit -m "feat(fusion): global-mode candidate-pool generation + coverage di
 - Create: `experiments/fgpl_seed/fusion_color.py`
 
 **Interfaces:**
-- Consumes: `work/seeds/fusion_pool.json`; `residuals_at_pose`; `C` (frame const); nearest-room cloud from `subset` + `room_centroids`.
-- Produces: `work/seeds/fusion_pool_colored.json` = pool with each candidate augmented `"color": float` (mean residual at `R_wc = Cᵀ·R`, scored against the candidate's nearest-room cloud).
+- Consumes: `work/seeds/fusion_pool.json`; `residuals_at_pose`; nearest-room cloud from `subset` + `room_centroids`.
+- Produces: `work/seeds/fusion_pool_colored.json` = pool with each candidate augmented `"color": float` (mean residual at the FGPL rotation `Rp` **fed as-is** — Task-1-derived convention — scored against the candidate's nearest-room cloud), plus `"room"` and `"geom"` (= `n_tight`).
 
 - [ ] **Step 1: Write `fusion_color.py`**
 
 ```python
-"""Color-score every FGPL candidate pose: color = mean(residuals_at_pose) at R_wc = C^T @ R
-(FGPL Rp -> world->camera) against the candidate's nearest-room cloud. Fair: reads only the
-pool + clouds, no GT (D5). Run in panopin-gpu. -> work/seeds/fusion_pool_colored.json."""
+"""Color-score every FGPL candidate pose: color = mean(residuals_at_pose) at the candidate's
+FGPL rotation Rp FED AS-IS (FGPL's Rp = C @ R_wc is already the equirect convention
+residuals_at_pose expects — derived in Task 1's fusion_convention_probe.py; do NOT apply
+C^T). Scored against the candidate's nearest-room cloud. Fair: reads only the pool + clouds,
+no GT (D5). Run in panopin-gpu. -> work/seeds/fusion_pool_colored.json."""
 import os, sys, json
-import numpy as np
 _HERE = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_HERE, "..", "..", "src"))
 sys.path.insert(0, os.path.join(_HERE, "..", ".."))
@@ -402,8 +405,6 @@ from experiments.fgpl_seed import subset, seed_and_config as sc, paths
 from panopin.determinism import pin
 from panopin.cpo_config import load_cfg
 from panopin.cpo_adapter import residuals_at_pose
-
-C = np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]], float)
 
 
 def _nearest_room(t, cents):
@@ -423,8 +424,7 @@ def main(sample_rate=30):
         pano_jpg = row_by_name[name]["pano_jpg"]
         for c in entry["candidates"]:
             room = _nearest_room(c["t"], cents)
-            R_wc = (C.T @ np.array(c["R"], float)).tolist()
-            res = residuals_at_pose(cfg, pano_jpg, clouds[room], c["t"], R_wc)
+            res = residuals_at_pose(cfg, pano_jpg, clouds[room], c["t"], c["R"])  # Rp as-is
             c["color"] = float(res.mean())
             c["room"] = room
             c["geom"] = float(c["n_tight"])          # alias the geom score the selectors read
