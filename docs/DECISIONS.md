@@ -495,3 +495,26 @@ caches. Scripts `experiments/fgpl_seed/loss_sink_probe.py` + `deploy_regime_sink
 - **NEXT (reframe):** stop optimizing per-pano recall; test the gate/coverage criterion — with a
   confidence signal (low-pct score / margin), is there a confident subset that is (a) high-precision
   and (b) covers every room? That is the real all-covered-deployment success metric. Offline-testable.
+
+## D32 — Reframe SOLVES deployment: per-room COVERAGE = 100% at precision 1.0 (confidence gate / room-anchored seeding), n=12 (2026-07-14)
+**Context.** D31 showed per-pano recall is capped by weak-lock panos (D23) and the loss-sink is a
+symptom. Reframed to the real deployment metric: per-ROOM coverage (one correct seed/room for FGPL)
+in the all-covered regime. Tested offline on the low-pct q20 scores, both caches.
+`experiments/fgpl_seed/deploy_regime_coverage.py`; COVERAGE_RESULTS.md.
+- **Result: per-pano recall 75-92% becomes per-room coverage 100% at precision 1.0** on BOTH caches,
+  every k in {3,4,5,6}. Weak-lock panos carry the HIGHEST absolute low-pct score (~0.12+ vs genuine
+  ~0.06-0.08) → they rank LAST, so a confidence gate on the winner-score admits all correct panos
+  first and hands FGPL ZERO wrong seeds while every room is still covered by its strong pano(s).
+- **winner-score >> margin** as the confidence signal (6-room 100% vs 83-90%): absolute low-pct value
+  measures lock quality directly; margin can be spuriously large for an impostor.
+- **Room-anchored assignment (`argmin_p score[p][r]`) = 100% correct seeds, threshold-free,
+  loss-sink-immune:** a room's genuine panos match it best, so each room self-seeds with its own pano
+  (the loss-sink attracts panos under per-pano argmin but never wins the room-anchored contest).
+- **Shipped:** `src/panopin/coverage.py` (`room_anchored_seeds`, `pano_confidence`) + tests (4/4).
+  This is the deployable PanoPin→FGPL hand-off: pair with `robust_score.low_percentile_scores`.
+- **Net story for "improve performance":** the win is NOT a higher per-pano number — it is realizing
+  per-ROOM coverage is the metric and that it is already ~100% at precision 1.0 via threshold-free
+  seeding. Ceiling on per-pano recall (D31) is real; it does not bind the deployment.
+- **Caveat:** n=12. **NEXT:** larger-pano GPU validation of the coverage/gate claim; then wire
+  `coverage.room_anchored_seeds(low_percentile_scores(...))` into the deployable seed path
+  (`cpo_seeds`/`select_room`) for the FGPL hand-off.

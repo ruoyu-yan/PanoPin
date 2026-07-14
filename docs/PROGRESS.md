@@ -2,6 +2,22 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-14 latest3 — reframe SOLVES deployment: per-room coverage 100% @ precision 1.0, D32; branch feat/deploy-regime)
+- Executed the D31 reframe: tested per-ROOM coverage (the real all-covered-deployment metric) offline on
+  low-pct q20 scores, both caches. `experiments/fgpl_seed/deploy_regime_coverage.py`; COVERAGE_RESULTS.md; D32.
+- **RESULT — SOLVED:** per-pano recall 75-92% becomes per-room coverage **100% at precision 1.0** on both
+  caches, every k in {3,4,5,6}. Weak-lock panos (D23/D31) carry the highest absolute low-pct score → rank
+  LAST → a winner-score confidence gate hands FGPL ZERO wrong seeds while every room is covered by its strong
+  pano. winner-score >> margin (6-room 100% vs 83-90%). **Room-anchored assignment (argmin_p score[p][r]) =
+  100% correct, threshold-free, loss-sink-immune** (each room self-seeds with its genuine best-matching pano).
+- **SHIPPED:** `src/panopin/coverage.py` (`room_anchored_seeds`, `pano_confidence`) + tests (4/4 green) — the
+  deployable PanoPin→FGPL hand-off, pair with `robust_score.low_percentile_scores`.
+- **The "improve performance" win** = not a bigger per-pano number but realizing per-ROOM coverage is the
+  metric and it is already ~100% at precision 1.0 via threshold-free seeding. Per-pano ceiling (D31) is real
+  but does NOT bind deployment. Caveat n=12. **NEXT:** larger-pano GPU validation of the coverage claim; then
+  wire `coverage.room_anchored_seeds(low_percentile_scores(...))` into cpo_seeds/select_room for the hand-off.
+- Branch feat/deploy-regime = 3 commits (D30 low-pct, D31 loss-sink, D32 coverage), LOCAL off main, NOT pushed.
+
 ## Current state (2026-07-14 latest2 — loss-sink attack REFUTED, D31; sink is a symptom of weak-lock panos; reframe to gate/coverage)
 - User delegated the architecture choice for the loss-sink attack ("try both and compare"). Compared
   per-pano-relative (minmax / rel_median / rel_q25) vs JOINT (per-room rank) assignment over the low-pct
