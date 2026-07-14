@@ -83,12 +83,13 @@ def write_seed(arm, rows, gt, cpo, centroids=None):
     return p
 
 
-def write_config(arm, rows, seed_path, line_map, metadata_path, feat_dir, pano_dir, narrowing=None):
-    _ensure_density_png()   # guarantee density_image_path resolves, independent of call order
+def write_config(arm, rows, seed_path, line_map, metadata_path, feat_dir, pano_dir,
+                 narrowing=None, use_local=True, extra=None):
+    _ensure_density_png()
     cfg = {
         "point_cloud_name": paths.SCENE,
         "pano_names": [r["pano_name"] for r in rows],
-        "use_local_filtering": True,
+        "use_local_filtering": use_local,
         "pkl_3d_path": str(line_map),
         "alignment_path": str(seed_path),
         "metadata_path": str(metadata_path),
@@ -99,7 +100,9 @@ def write_config(arm, rows, seed_path, line_map, metadata_path, feat_dir, pano_d
         "output_dir": str(paths.WORK / "poses" / arm),
     }
     if narrowing:
-        cfg.update(narrowing)                        # seed_trans_radius / seed_yaw_deg / seed_yaw_tol
+        cfg.update(narrowing)
+    if extra:
+        cfg.update(extra)
     p = _configs_dir() / f"pose_{arm}.json"
     with open(p, "w") as f:
         json.dump(cfg, f, indent=2)

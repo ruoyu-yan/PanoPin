@@ -26,3 +26,27 @@ def run_arm(config_path, rows):
         else:
             poses[r["pano_name"]] = None
     return poses
+
+
+def run_arm_pool(config_path, rows):
+    """Like run_arm but also collect each pano's dumped candidate pool (candidates.json).
+    Returns {pano_name: {"best": {translation,rotation}|None, "candidates": [ ... ]}}."""
+    import json, subprocess, os
+    from experiments.fgpl_seed import paths
+    with open(config_path) as f:
+        cfg = json.load(f)
+    out_base = cfg["output_dir"]
+    cmd = ["conda", "run", "--no-capture-output", "-n", paths.ESTIMATOR_ENV,
+           "python", str(paths.ESTIMATOR), "--config", str(config_path)]
+    print("RUN:", " ".join(cmd))
+    subprocess.run(cmd, cwd=str(paths.FGPL_ROOT), env=dict(os.environ), check=False)
+    res = {}
+    for r in rows:
+        d = os.path.join(out_base, r["pano_name"])
+        cp, cand = os.path.join(d, "camera_pose.json"), os.path.join(d, "candidates.json")
+        best = None
+        if os.path.exists(cp):
+            j = json.load(open(cp)); best = {"translation": j["translation"], "rotation": j["rotation"]}
+        cands = json.load(open(cand)) if os.path.exists(cand) else []
+        res[r["pano_name"]] = {"best": best, "candidates": cands}
+    return res
