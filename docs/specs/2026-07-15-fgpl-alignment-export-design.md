@@ -116,8 +116,10 @@ lower = better; genuine locks ~0.06–0.08, weak-lock ~0.12+.
   room even better, i.e. the impostor case, where the free-pano fallback is the correct degradation). If no
   free pano remains for a room, it is left uncovered and logged (never a duplicate emission).
 
-Edge cases: empty `score_matrix` → `([], [])`. A room absent from a pano's score dict is treated as
-missing/skipped for that pano (defensive; localize_and_score fills all pairs).
+Edge cases: empty `score_matrix` → `([], [])`. Otherwise `build_matches` assumes the dense pano×room
+grid that `seed.localize_and_score` produces (every pano scored against every room in `room_order`); a
+room missing from a pano's score dict, or a picked room absent from `room_order`, raises rather than
+silently skips — the grid is a contract, not a best-effort input.
 
 ## 6. Output contract
 
