@@ -66,6 +66,16 @@ def test_backstop_covers_room_with_no_confident_pano():
     assert {m["room_label"] for m in m_off} == {"A"}          # B dropped
 
 
+def test_backstop_no_free_pano_leaves_room_uncovered():
+    # Only one pano exists (g1), gated to A; B has no confident pano AND no free pano left to
+    # borrow from (g1 is already assigned) -> B stays uncovered, exercising `if not free: continue`.
+    scores = {"g1": {"A": 0.06, "B": 0.30}}
+    poses = _poses({("g1", "A"): [1, 0, 0], ("g1", "B"): [1, 1, 0]})
+    matches, admitted = build_matches(scores, poses, ["A", "B"], _ID, guarantee_coverage=True)
+    assert {m["room_label"] for m in matches} == {"A"}
+    assert admitted.count("g1") == 1
+
+
 def test_pano_appears_at_most_once():
     # g1 is confident in A AND is the global argmin for uncovered B; must NOT be double-emitted.
     scores = {
@@ -109,6 +119,14 @@ def test_write_alignment_json_shape(tmp_path):
     assert d["metadata"]["pano_names"] == ["g1"]
     assert d["metadata"]["tau"] == 0.10
     assert d["matches"] == matches
+
+
+def test_write_alignment_json_creates_parent_dir(tmp_path):
+    matches = [{"pano_name": "g1", "room_idx": 0, "room_label": "A", "score": 0.06,
+                "rotation_deg": 0.0, "camera_position": [1.0, 2.0]}]
+    out = tmp_path / "nested" / "sub" / "demo6_alignment.json"
+    write_alignment_json(matches, ["g1"], out, extra_meta={"tau": 0.10})
+    assert out.exists()
 
 
 def test_export_alignment_end_to_end(tmp_path):

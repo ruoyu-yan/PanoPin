@@ -11,6 +11,8 @@ camera_position. Fair: reads only scores/poses/metadata, never GT (D5).
 Deployment contract: the caller MUST set FGPL cfg["pano_names"] = the returned admitted list
 (an unseeded name in pano_names -> KeyError in FGPL's loader)."""
 import json
+from pathlib import Path
+
 import numpy as np
 
 from panopin import coverage
@@ -75,6 +77,7 @@ def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_c
 
 def write_alignment_json(matches, admitted_pano_names, out_path, extra_meta=None):
     """Serialize the exact demo6_alignment.json schema FGPL reads (align_polygons_demo6.py)."""
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     meta = {"pipeline": "PanoPin color seed (gated per-pano)",
             "pano_names": list(admitted_pano_names),
             "source": "fgpl_export"}

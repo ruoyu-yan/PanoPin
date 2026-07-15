@@ -2,6 +2,7 @@
 poses, then verify FGPL recovers each admitted pano's raw position. Always checks the inline
 FGPL transform; additionally checks FGPL's real load_panorama_positions when importable."""
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from panopin.fgpl_export import build_matches, write_alignment_json
 
 _REPO = Path(__file__).resolve().parent.parent
 _CACHE = _REPO / "experiments" / "fgpl_seed" / "work" / "seeds"
-_FGPL = Path("/home/ruoyu/scan2measure-webframework")
+_FGPL = Path(os.environ.get("SCAN2MEASURE_REPO", "/home/ruoyu/scan2measure-webframework"))
 _ID = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
 
 pytestmark = pytest.mark.skipif(
@@ -45,14 +46,14 @@ def test_smoke_positions_recover_inline(tmp_path):
     assert len(admitted) == len(set(admitted))
 
 
-def test_smoke_through_real_fgpl_loader(tmp_path):
+def test_smoke_through_real_fgpl_loader(tmp_path, monkeypatch):
     cache, scores, poses, room_order = _load()
     matches, admitted = build_matches(scores, poses, room_order, _ID, tau=0.10)
     out = tmp_path / "demo6_alignment.json"
     write_alignment_json(matches, admitted, out)
     meta = tmp_path / "metadata.json"
     meta.write_text(json.dumps({"rotation_matrix": _ID}))
-    sys.path.insert(0, str(_FGPL / "src" / "pose_estimation"))
+    monkeypatch.syspath_prepend(str(_FGPL / "src" / "pose_estimation"))
     try:
         from multiroom_pose_estimation import load_panorama_positions
     except Exception as e:                       # heavy deps / repo layout
