@@ -579,3 +579,43 @@ functions, no GPU, no CPO import) + `tests/test_fgpl_export.py` (10 unit) + `tes
   not the method). Then Electron/pipeline wiring.
 - Commits (Tasks 1-5): 45b5389, d2463ab, 9c449a0, fe66aa5, 06dcdd2. All LOCAL on `feat/deploy-regime`,
   nothing pushed.
+
+## D35 — PanoPin<->FGPL validation round-trip (§8): plumbing proven, per-room coverage 6/6, right-room trans ~1.05m, not oracle-tight (2026-07-15)
+**Context.** Spec §8 fast-follow to D34: does the `fgpl_export` seed actually drive FGPL's real
+estimator end-to-end, and does the D34 `tau=0.10` gate hold up THROUGH FGPL (not just on the score
+matrix)? Method: build the `fgpl_export` seed (gated at `tau=0.10`) on the `area3_seed_ablation`
+6-room subset (office_1/4/5/6/7 + hallway_3, 12 in-frame panos), run FGPL's real
+`multiroom_pose_estimation` estimator on the admitted panos, score the refined poses vs S3DIS GT
+alongside the cached `oracle`/`p1` reference arms. Code `experiments/fgpl_seed/roundtrip.py` + unit
+test `tests/test_roundtrip.py` (3/3); results `experiments/fgpl_seed/ROUNDTRIP_RESULTS.md`.
+- **The gate admitted 10/12 panos** (2 weak-lock omitted per D30/D34's tau=0.10); FGPL ran on those
+  10 with **zero errors, 10/10 localized**.
+- **Per-room coverage 6/6** (every room has >=1 admitted pano that refines into it) — hallway_3,
+  office_1/4/5/6/7 all OK.
+- **Accuracy (fgpl_export gated vs cached refs):** trans median **1.082 m** (right-room slice
+  **1.048 m, n=9**), mean 3.044 m, max 21.838 m, rotation median 105.2°, wrong-room 0.20 — vs
+  cached `oracle` (0.696 m median, 0.647 mean, 1.579 max, rot 89.9°, wrong 0.00) and cached `p1`
+  raw min-loss (0.998 m median, 5.205 mean, 24.426 max, rot 105.0°, wrong 0.20).
+- **(1) Plumbing PROVEN:** the D34 `fgpl_export` seed drives FGPL's real estimator to a
+  `camera_pose.json` for all 10 admitted panos with zero errors — spec §8's end-to-end question is
+  answered, PanoPin and FGPL run together.
+- **(2) Deployment claim HOLDS through refinement:** per-room coverage stays 6/6 even with 2/10
+  wrong-room panos, because each room still has another correct pano — exactly the D32 argument for
+  why per-ROOM coverage, not per-pano recall, is the deployment metric.
+- **(3) Accuracy is decent but NOT oracle-tight:** right-room translation (~1.05 m) is well short of
+  oracle (0.70 m); and the gated seed's overall median (1.082 m) is basically TIED with the old p1
+  raw-min-loss seed (0.998 m) at n=10 — better tail/mean (3.0 vs 5.2 m) but not a clear median win.
+  Consistent with the D31/D23 per-pano color ceiling — gating removes the worst weak-lock panos but
+  doesn't lift the survivors to oracle quality.
+- **(4) Rotation (~105° median) is an FGPL limitation, not a PanoPin regression:** the oracle itself
+  is ~90° off GT (FGPL Manhattan-aliasing, D25) — rotation was never claimed accurate by this seed.
+- **(5) This run doubles as the deferred D34 `tau=0.10` precision check, now measured THROUGH FGPL**
+  (not just on the offline score matrix): the gate's wrong-room rate (0.20) matches `p1`'s, so
+  gating at this tau does not visibly change wrong-room rate on this small sample, but it does drop
+  2 weak-lock panos before they reach FGPL at all.
+- **Caveats:** oracle/p1 cached reference poses ran with a 12-pano Voronoi vs this arm's 10-pano
+  Voronoi (a reference context, not a controlled ablation); Area_3 subset only (6 rooms, 12 panos).
+- **NEXT:** Option B production/Electron pipeline wiring (real `demo6_alignment.json` seeds feeding
+  the real Scan2BIM FGPL run); optional larger-n / cross-area validation of this round-trip.
+- Commits: a42f452, 4b0fedd, e6dec74, c9794bf, 76d2654, e2397fc. All LOCAL on `feat/fgpl-roundtrip`,
+  nothing pushed.

@@ -2,6 +2,33 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-15 latest — FGPL round-trip measured through FGPL: coverage 6/6, ~1.05m right-room, D35; branch feat/fgpl-roundtrip)
+- Executed the D34 spec §8 fast-follow: built the `fgpl_export` seed (gated at `tau=0.10`) on the
+  `area3_seed_ablation` 6-room subset (office_1/4/5/6/7 + hallway_3, 12 in-frame panos), ran FGPL's
+  REAL `multiroom_pose_estimation` estimator on the admitted panos, scored the refined poses vs
+  S3DIS GT next to the cached `oracle`/`p1` reference arms. Spec
+  `docs/specs/2026-07-15-fgpl-roundtrip-design.md`, plan `docs/plans/2026-07-15-fgpl-roundtrip.md`;
+  executed subagent-driven (SDD ledger `.superpowers/sdd/progress.md`), Tasks 1-3 (+ this docs Task 4).
+- **Shipped `experiments/fgpl_seed/roundtrip.py`** (seed build + GPU-free pre-check + per-room
+  coverage metric + cached-arm loader + end-to-end run/report) + `tests/test_roundtrip.py` (3/3
+  green) + `experiments/fgpl_seed/ROUNDTRIP_RESULTS.md`.
+- **Headline:** the gate admitted 10/12 panos (2 weak-lock omitted); FGPL localized **10/10** with
+  zero errors. **Per-room coverage 6/6** (every room covered despite 2/10 wrong-room panos — exactly
+  the D32 coverage argument, now confirmed post-refinement). Right-room translation median **1.048 m
+  (n=9)** vs cached oracle 0.696 m — decent but not oracle-tight; overall gated median 1.082 m is
+  basically TIED with the old raw-min-loss `p1` seed (0.998 m) at n=10 (better tail/mean 3.0 vs
+  5.2 m, not a clean median win). Rotation ~105° median is an FGPL limitation (oracle itself ~90°
+  off, D25), not a PanoPin regression. Full numbers + caveats in D35.
+- **Test evidence:** `pytest tests/test_roundtrip.py` 3/3 green (pre-check + coverage-metric unit
+  tests); the FGPL run itself is the end-to-end evidence — 10/10 localized, results captured in
+  ROUNDTRIP_RESULTS.md.
+- **This run also serves as the deferred D34 `tau=0.10` precision check, now measured THROUGH FGPL**
+  (not just on the offline score matrix).
+- **STOPPED** after recording D35 + this entry (Task 4). **NEXT** = Option B production/Electron
+  pipeline wiring (real `demo6_alignment.json` seeds feeding the real Scan2BIM FGPL run); optional
+  larger-n / cross-area validation of the round-trip. Branch `feat/fgpl-roundtrip` (commits a42f452,
+  4b0fedd, e6dec74, c9794bf, 76d2654, e2397fc + this docs commit), all LOCAL, nothing pushed.
+
 ## Current state (2026-07-15 — FGPL alignment export shipped: per-pano re-scope, gate+backstop, frame guard, D34; branch feat/deploy-regime)
 - Before wiring D33's `seed.seed_rooms` hand-off, traced FGPL's actual consumer
   (`multiroom_pose_estimation.load_panorama_positions`) per spec
@@ -209,6 +236,24 @@ _Newest first. Update at the END of every session: what changed, what's next, wh
 - Plans: v0 `docs/plans/2026-07-08-coarse-room-cpo-v0.md`; Plan 2 (cheap Tier-1) ABANDONED. Decisions D14–D24.
 
 ## Session log
+
+### 2026-07-15 (latest) — PanoPin<->FGPL round-trip measured through FGPL (Tasks 1-4, D35)
+- Spec §8 fast-follow off D34: wrote spec `docs/specs/2026-07-15-fgpl-roundtrip-design.md` + plan
+  `docs/plans/2026-07-15-fgpl-roundtrip.md`; executed subagent-driven, Tasks 1-4 all green (ledger
+  `.superpowers/sdd/progress.md`).
+- Task 1 (a42f452) `fgpl_export` seed build + GPU-free FGPL-loader pre-check; Task 2 (4b0fedd,
+  e6dec74) per-room coverage metric + cached-arm loader + unit tests (review fix added a
+  wrong-landing discriminating test); Task 3 (c9794bf, 76d2654, e2397fc) `main()` end-to-end run —
+  built the gated seed, ran FGPL's real estimator, captured results (review fix: None-guard +
+  readable per-room report), then the actual run.
+- **RESULT:** gate admitted 10/12 panos; FGPL localized 10/10, zero errors. Per-room coverage 6/6.
+  Right-room trans median 1.048 m (n=9) vs oracle 0.696 m; overall gated median 1.082 m ties `p1`
+  raw-min-loss 0.998 m at n=10 (better mean/tail 3.0 vs 5.2 m). Rotation ~105° matches the oracle's
+  own ~90° FGPL Manhattan-aliasing (D25), not a regression. Full numbers
+  `experiments/fgpl_seed/ROUNDTRIP_RESULTS.md`; interpretation D35.
+- Task 4 (this entry): recorded D35 + this PROGRESS entry.
+- **STOPPED** after Task 4. **NEXT** = Option B production/Electron pipeline wiring; optional
+  larger-n/cross-area validation. All LOCAL on `feat/fgpl-roundtrip`, nothing pushed.
 
 ### 2026-07-15 — PanoPin->FGPL alignment export (Tasks 1-6, D34)
 - Traced FGPL's real consumer before wiring D33's seed hand-off:
