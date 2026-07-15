@@ -106,8 +106,15 @@ lower = better; genuine locks ~0.06–0.08, weak-lock ~0.12+.
   room-anchored contest is 100% correct and loss-sink-immune (D32) — so **precision is not sacrificed**;
   the backstop only prevents silently dropping a room whose every pano fell below the gate. Empirically
   rare (every room had a confident pano at n≤32) but keeps the "every room covered" deployment promise
-  literally true. A backstop pano may already be admitted for another room via the per-pano gate; a pano
-  seeding >1 room is acceptable (each room gets an independent FGPL seed, per `coverage.py`).
+  literally true.
+- **Per-pano uniqueness (FGPL constraint).** FGPL's `load_panorama_positions` builds `positions[pano_name]`
+  = one XY per pano (a duplicate `pano_name` silently overwrites, last-wins), so **each pano may appear at
+  most once in `matches`.** The gate assigns each pano its winner room. The backstop, for an uncovered
+  room, therefore picks the best *unassigned* pano for that room (`argmin_{p not yet assigned} score[p][room]`),
+  not simply `argmin_p` — which equals the D32 room-anchored pick in the common all-covered case (a room's
+  genuine best pano is abstained-at-that-room, hence free; it is only "taken" when it matches a foreign
+  room even better, i.e. the impostor case, where the free-pano fallback is the correct degradation). If no
+  free pano remains for a room, it is left uncovered and logged (never a duplicate emission).
 
 Edge cases: empty `score_matrix` → `([], [])`. A room absent from a pano's score dict is treated as
 missing/skipped for that pano (defensive; localize_and_score fills all pairs).
