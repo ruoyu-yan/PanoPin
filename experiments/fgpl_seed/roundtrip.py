@@ -148,9 +148,10 @@ def main():
         json.dump(results, f, indent=2)
 
     _write_report(results, all_rooms)
+    tm = s["translation"]["median"]
     print(f"\n[roundtrip] coverage {n_cov}/{n_rooms}  "
-          f"trans_med={s['translation']['median']:.3f}  "
-          f"right-room_med={trans_right if trans_right is None else round(trans_right,3)}  "
+          f"trans_med={'n/a' if tm is None else round(tm, 3)}  "
+          f"right-room_med={trans_right if trans_right is None else round(trans_right, 3)}  "
           f"wrong_room={s['wrong_room_rate']}\nwrote {out}", flush=True)
 
 
@@ -159,6 +160,7 @@ def _write_report(res, all_rooms):
     cov = res["coverage"]
     def f(x, p=3):
         return "n/a" if x is None else f"{x:.{p}f}"
+    per_room = ", ".join(f"{r}={'OK' if v else 'MISS'}" for r, v in cov["covered"].items())
     lines = [
         "# PanoPin<->FGPL validation round-trip results",
         "",
@@ -168,7 +170,7 @@ def _write_report(res, all_rooms):
         "",
         f"**Per-room coverage: {cov['n_covered']}/{cov['n_rooms']}** "
         f"(a room counts iff >=1 admitted pano of that TRUE room refines into it). "
-        f"Per room: {cov['covered']}.",
+        f"Per room: {per_room}.",
         "",
         "| arm | n_localized | trans median | trans median (right-room) | trans mean | trans max | rot median | wrong-room |",
         "|-----|-------------|--------------|---------------------------|------------|-----------|-----------|-----------|",
