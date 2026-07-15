@@ -64,3 +64,32 @@ def precheck_seed(seed_path, md_path, admitted, rows):
     all_rooms = {r["room"] for r in rows}
     assert seeded_rooms == all_rooms, (sorted(seeded_rooms), sorted(all_rooms))
     return len(matches), sorted(all_rooms)
+
+
+def per_room_coverage(poses_cw, admitted_rows, all_rooms, cents):
+    """Rooms whose refined FGPL pose lands in the correct room. A room r is covered iff >=1
+    admitted pano whose TRUE room is r has a pose whose nearest centroid == r. Denominator =
+    all_rooms (the full subset room set). Returns (n_covered, n_rooms, {room: bool})."""
+    true_room = {r["pano_name"]: r["room"] for r in admitted_rows}
+    covered = {r: False for r in all_rooms}
+    for u, p in poses_cw.items():
+        if p is None:
+            continue
+        tr = true_room[u]
+        if score._nearest_room(p["translation"], cents) == tr:
+            covered[tr] = True
+    return sum(covered.values()), len(all_rooms), covered
+
+
+def load_cached_arm(arm, rows):
+    """Load a previously-run arm's per-pano FGPL poses from work/poses/<arm>/ (no re-run)."""
+    base = paths.WORK / "poses" / arm
+    out = {}
+    for r in rows:
+        cp = base / r["pano_name"] / "camera_pose.json"
+        if cp.exists():
+            d = json.load(open(cp))
+            out[r["pano_name"]] = {"translation": d["translation"], "rotation": d["rotation"]}
+        else:
+            out[r["pano_name"]] = None
+    return out
