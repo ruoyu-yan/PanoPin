@@ -93,3 +93,104 @@ def load_cached_arm(arm, rows):
         else:
             out[r["pano_name"]] = None
     return out
+
+
+def _score_cw(poses, gt, rows, cents):
+    poses_cw = {u: (None if p is None else
+                    {"translation": p["translation"], "rotation": _fgpl_rot_to_cw(p["rotation"])})
+                for u, p in poses.items()}
+    return poses_cw, score.score_arm(poses_cw, gt, rows, cents)
+
+
+def main():
+    rows = subset.build_subset()
+    gt = s3dis_gt.load_gt("Area_3", s3dis_gt.load_config(None))
+    cents = sc.room_centroids(rows)
+    md = sc.write_identity_metadata()
+    line_map = paths.WORK / "linemap" / "3d_line_map.pkl"
+    feat, panos = paths.WORK / "features", paths.WORK / "panos"
+    all_rooms = sorted({r["room"] for r in rows})
+
+    # --- build + pre-check the fgpl_export seed (offline) ---
+    seed_path, admitted = build_export_seed(rows, md)
+    n_seed, _ = precheck_seed(seed_path, md, admitted, rows)
+    admitted_rows = [r for r in rows if r["pano_name"] in admitted]
+    seed_room = {m["pano_name"]: m["room_label"]
+                 for m in json.load(open(seed_path))["matches"]}
+    print(f"[precheck] {n_seed} seeds admitted; rooms {all_rooms}", flush=True)
+
+    # --- run FGPL on the admitted panos (the expensive step) ---
+    cfg = sc.write_config("fgpl_export", admitted_rows, seed_path, line_map, md, feat, panos)
+    poses = run_arm.run_arm(cfg, admitted_rows)
+    poses_cw, s = _score_cw(poses, gt, admitted_rows, cents)
+    n_cov, n_rooms, covered = per_room_coverage(poses_cw, admitted_rows, all_rooms, cents)
+
+    # right-room slice: median trans over admitted panos whose SEED room == true room
+    pu = s["translation"]["per_uuid"]
+    right = [r["pano_name"] for r in admitted_rows
+             if seed_room.get(r["pano_name"]) == r["room"]]
+    import statistics
+    rr = [pu[u] for u in right if u in pu]
+    trans_right = statistics.median(rr) if rr else None
+
+    # --- cached reference arms, scored on the SAME admitted set ---
+    refs = {}
+    for arm in ("oracle", "p1"):
+        _, rs = _score_cw(load_cached_arm(arm, admitted_rows), gt, admitted_rows, cents)
+        refs[arm] = rs
+
+    results = {"fgpl_export": s, "coverage": {"n_covered": n_cov, "n_rooms": n_rooms,
+               "covered": covered}, "trans_median_right_room": trans_right,
+               "n_right_room": len(rr), "n_admitted": len(admitted_rows),
+               "references": refs}
+    out = paths.subdir("results") / "roundtrip.json"
+    with open(out, "w") as f:
+        json.dump(results, f, indent=2)
+
+    _write_report(results, all_rooms)
+    print(f"\n[roundtrip] coverage {n_cov}/{n_rooms}  "
+          f"trans_med={s['translation']['median']:.3f}  "
+          f"right-room_med={trans_right if trans_right is None else round(trans_right,3)}  "
+          f"wrong_room={s['wrong_room_rate']}\nwrote {out}", flush=True)
+
+
+def _write_report(res, all_rooms):
+    s = res["fgpl_export"]; t, r = s["translation"], s["rotation"]
+    cov = res["coverage"]
+    def f(x, p=3):
+        return "n/a" if x is None else f"{x:.{p}f}"
+    lines = [
+        "# PanoPin<->FGPL validation round-trip results",
+        "",
+        f"Scene: area3_seed_ablation (6-room subset, 12 in-frame panos). "
+        f"fgpl_export arm gated at tau=0.10; FGPL estimator run on the {res['n_admitted']} "
+        f"admitted panos. Fair: seed from cached color scores only (no GT).",
+        "",
+        f"**Per-room coverage: {cov['n_covered']}/{cov['n_rooms']}** "
+        f"(a room counts iff >=1 admitted pano of that TRUE room refines into it). "
+        f"Per room: {cov['covered']}.",
+        "",
+        "| arm | n_localized | trans median | trans median (right-room) | trans mean | trans max | rot median | wrong-room |",
+        "|-----|-------------|--------------|---------------------------|------------|-----------|-----------|-----------|",
+        f"| fgpl_export (gated) | {s['n_localized']}/{res['n_admitted']} | {f(t['median'])} | "
+        f"{f(res['trans_median_right_room'])} ({res['n_right_room']}) | {f(t['mean'])} | "
+        f"{f(t['max'])} | {f(r['median'],1)} | {f(s['wrong_room_rate'],2)} |",
+    ]
+    for arm in ("oracle", "p1"):
+        rs = res["references"][arm]; rt, rr2 = rs["translation"], rs["rotation"]
+        lines.append(
+            f"| {arm} (cached, ref) | {rs['n_localized']}/{res['n_admitted']} | {f(rt['median'])} "
+            f"| n/a | {f(rt['mean'])} | {f(rt['max'])} | {f(rr2['median'],1)} | "
+            f"{f(rs['wrong_room_rate'],2)} |")
+    lines += [
+        "",
+        "Caveats: oracle/p1 cached poses ran with a 12-pano Voronoi vs this arm's "
+        f"{res['n_admitted']}-pano Voronoi (reference context, not a controlled ablation); "
+        "Area_3 subset only; tau=0.10 is the D34 Area_3-tuned value (this run also serves as "
+        "its through-FGPL precision check).",
+    ]
+    (paths.HERE / "ROUNDTRIP_RESULTS.md").write_text("\n".join(lines) + "\n")
+
+
+if __name__ == "__main__":
+    main()
