@@ -71,3 +71,14 @@ def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_c
         })
     admitted_pano_names = [m["pano_name"] for m in matches]
     return matches, admitted_pano_names
+
+
+def write_alignment_json(matches, admitted_pano_names, out_path, extra_meta=None):
+    """Serialize the exact demo6_alignment.json schema FGPL reads (align_polygons_demo6.py)."""
+    meta = {"pipeline": "PanoPin color seed (gated per-pano)",
+            "pano_names": list(admitted_pano_names),
+            "source": "fgpl_export"}
+    if extra_meta:
+        meta.update(extra_meta)
+    with open(out_path, "w") as f:
+        json.dump({"metadata": meta, "matches": matches}, f, indent=4)

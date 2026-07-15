@@ -1,7 +1,8 @@
+import json
 import math
 import numpy as np
 import pytest
-from panopin.fgpl_export import raw_t_to_camera_position, build_matches
+from panopin.fgpl_export import raw_t_to_camera_position, build_matches, write_alignment_json
 
 
 _ID = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
@@ -96,3 +97,15 @@ def test_match_schema_and_room_idx():
 
 def test_empty_score_matrix():
     assert build_matches({}, {}, ["A"], _ID) == ([], [])
+
+
+def test_write_alignment_json_shape(tmp_path):
+    matches = [{"pano_name": "g1", "room_idx": 0, "room_label": "A", "score": 0.06,
+                "rotation_deg": 0.0, "camera_position": [1.0, 2.0]}]
+    out = tmp_path / "demo6_alignment.json"
+    write_alignment_json(matches, ["g1"], out, extra_meta={"tau": 0.10})
+    d = json.loads(out.read_text())
+    assert set(d) == {"metadata", "matches"}
+    assert d["metadata"]["pano_names"] == ["g1"]
+    assert d["metadata"]["tau"] == 0.10
+    assert d["matches"] == matches
