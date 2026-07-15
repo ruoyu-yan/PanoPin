@@ -38,7 +38,16 @@
       "title": "Add coarse pose seed + define the FGPL hand-off",
       "status": "todo",
       "passes": false,
-      "verify": "predictions include coarse_pose; score.py reports translation/rotation error; hand-off to FGPL documented in docs/"
+      "verify": "predictions include coarse_pose; score.py reports translation/rotation error; hand-off to FGPL documented in docs/",
+      "notes": "The 'hand-off to FGPL documented' half is now DONE via T4b (fgpl_export module + D34) — FGPL's real consumer was traced and a schema-exact demo6_alignment.json exporter shipped. Still open for T4: wiring coarse_pose into eval/predictions + score.py translation/rotation reporting (that uses eval/, not FGPL's own schema)."
+    },
+    {
+      "id": "T4b",
+      "title": "PanoPin -> FGPL alignment export (gated per-pano seeds) — D34",
+      "status": "done",
+      "passes": true,
+      "verify": "conda run -n panopin python -m pytest tests/test_fgpl_export.py tests/test_fgpl_export_smoke.py -q  ->  12 passed, 2 warnings in 0.20s",
+      "notes": "src/panopin/fgpl_export.py (4 pure, no-GPU, no-CPO functions: raw_t_to_camera_position frame guard, build_matches gate tau=0.10 + room-anchored coverage backstop restricted to free panos, write_alignment_json, export_alignment). Tests tests/test_fgpl_export.py (10 unit) + tests/test_fgpl_export_smoke.py (2 integration-smoke: builds a real demo6_alignment.json from cached D33 largeval grids/poses and loads it back through FGPL's OWN load_panorama_positions -- PASSED not skipped, positions recover to 1e-6). Spec docs/specs/2026-07-15-fgpl-alignment-export-design.md; plan docs/plans/2026-07-15-fgpl-alignment-export.md. Commits 45b5389, d2463ab, 9c449a0, fe66aa5, 06dcdd2 (feat/deploy-regime, LOCAL, nothing pushed). Key finding: FGPL consumer trace re-scopes the D33 hand-off from per-room to per-pano (FGPL localizes each pano independently from its own seed). Fast-follow (out of scope, spec Sec8): live FGPL GPU round-trip on Area_3, then Electron/pipeline wiring."
     },
     {
       "id": "T5",

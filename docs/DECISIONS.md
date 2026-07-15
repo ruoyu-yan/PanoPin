@@ -542,3 +542,40 @@ residual grids, and re-ran the D30/D32 metrics over 3..8-room all-covered subset
   (Area_3); cross-area validation is the remaining generalization question.
 - **NEXT:** wire `seed.seed_rooms` into the FGPL runner input (demo6_alignment.json per-room seeds) so
   the real Scan2BIM pipeline consumes it; optional cross-area check.
+
+## D34 — PanoPin->FGPL alignment export: per-pano re-scope, gate & omit + coverage backstop, frame guard (2026-07-15)
+**Context.** Before wiring the D33 seed hand-off, traced FGPL's actual consumer
+(`multiroom_pose_estimation.load_panorama_positions`) per spec
+`docs/specs/2026-07-15-fgpl-alignment-export-design.md`. Shipped `src/panopin/fgpl_export.py` (4 pure
+functions, no GPU, no CPO import) + `tests/test_fgpl_export.py` (10 unit) + `tests/test_fgpl_export_smoke.py`
+(2 integration-smoke); full suite **12 passed, 2 warnings in 0.20s**.
+- **The consumer trace re-scopes the hand-off from per-room to per-pano.** `load_panorama_positions` reads
+  `alignment['matches']` per-pano, positional-only: only `pano_name` + `camera_position` are load-bearing
+  (`room_label`/`room_idx`/`rotation_deg`/`score` are ignored — `room_label` appears only in a `print`). Each
+  pano is localized independently from its own seed via its own Voronoi cell, so anchoring a room
+  (`coverage.room_anchored_seeds`, D32) does NOT localize that room's other panos. D33's "wire
+  `seed.seed_rooms`" hand-off therefore means **one match per pano**, not one per room.
+- **Gate & omit (user decision) + room-anchored coverage backstop.**
+  `build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_coverage=True)` admits a pano
+  at its argmin room iff the low-pct winner score <= `tau=0.10` (the empirical gap between genuine ~0.06-0.08
+  and weak-lock ~0.12+ locks, D30/D32); weak-lock panos (~15-22%, the D23/D31 color hard floor) are omitted
+  rather than guess-seeded, so FGPL gets zero wrong seeds. Any room left uncovered by the gate gets a
+  room-anchored backstop pick restricted to FREE (unassigned) panos, since FGPL's `load_panorama_positions`
+  keys positions by `pano_name` (a duplicate silently last-wins) — per-pano uniqueness is enforced by
+  construction, not by luck.
+- **Frame conversion, guarded, not assumed.** PanoPin's CPO `t` is raw-S3DIS-frame; FGPL's `camera_position`
+  is aligned-frame (`raw = R.T @ [ax,ay,0]`). `raw_t_to_camera_position(t_raw, R_meta, tol=1e-6)` inverts
+  exactly for a yaw `R`: `camera_position = (R @ t_raw)[:2]`, and asserts the round-trip through FGPL's own
+  converter rather than trusting the math — fails loud on non-yaw/malformed metadata. In the D25 ablation
+  `metadata.json` was identity (silent no-op); real deployment has `R != I`, which is exactly what this
+  guards against.
+- **Real-loader validation, not just schema inspection.** The integration smoke builds an actual
+  `demo6_alignment.json` from the cached D33 largeval grids/poses and loads it back through FGPL's own
+  `load_panorama_positions` (not skipped — FGPL is importable in the `panopin` env): positions recover to
+  1e-6, confirming the schema is exactly right end-to-end, not just by inspection of the source.
+- **Fast-follow (out of scope, spec §8):** the live FGPL GPU round-trip — run `multiroom_pose_estimation` on
+  a PanoPin-seeded `demo6_alignment.json` for a couple of Area_3 rooms and compare the refined pose to S3DIS
+  GT (D25 already showed a correct-room color seed -> oracle-quality FGPL pose, so this confirms plumbing,
+  not the method). Then Electron/pipeline wiring.
+- Commits (Tasks 1-5): 45b5389, d2463ab, 9c449a0, fe66aa5, 06dcdd2. All LOCAL on `feat/deploy-regime`,
+  nothing pushed.

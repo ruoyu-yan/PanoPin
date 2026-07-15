@@ -2,6 +2,31 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-15 — FGPL alignment export shipped: per-pano re-scope, gate+backstop, frame guard, D34; branch feat/deploy-regime)
+- Before wiring D33's `seed.seed_rooms` hand-off, traced FGPL's actual consumer
+  (`multiroom_pose_estimation.load_panorama_positions`) per spec
+  `docs/specs/2026-07-15-fgpl-alignment-export-design.md` + plan
+  `docs/plans/2026-07-15-fgpl-alignment-export.md`; executed subagent-driven (SDD ledger
+  `.superpowers/sdd/progress.md`), Tasks 1-6.
+- **Shipped `src/panopin/fgpl_export.py`** — 4 pure functions (no GPU, no CPO import):
+  `raw_t_to_camera_position` (frame guard, fails loud on a bad round-trip), `build_matches` (per-pano gate
+  `tau=0.10` + room-anchored coverage backstop restricted to free panos), `write_alignment_json` (exact
+  `demo6_alignment.json` schema), `export_alignment` (convenience wrapper, returns `admitted_pano_names` for
+  the caller to set FGPL's `cfg["pano_names"]`).
+- **Test evidence:** `tests/test_fgpl_export.py` (10 unit) + `tests/test_fgpl_export_smoke.py` (2
+  integration-smoke — builds a real alignment json from cached D33 largeval grids/poses and loads it back
+  through FGPL's OWN `load_panorama_positions`, PASSED not skipped, positions recover to 1e-6). Full suite:
+  `12 passed, 2 warnings in 0.20s`.
+- **Key finding (D34):** the hand-off is per-PANO, not per-room — FGPL localizes each pano independently from
+  its own seed, so anchoring a room's pano does not localize that room's other panos; D33's "wire
+  `seed.seed_rooms`" is re-scoped accordingly. `docs/tasks.json` gained `T4b` (done) referencing this module;
+  `T4` stays open for the remaining coarse_pose/`eval/score.py` piece.
+- **STOPPED** after Task 6 (this docs pass). **NEXT** = spec §8 fast-follow: the live FGPL GPU round-trip —
+  run `multiroom_pose_estimation` on a PanoPin-seeded `demo6_alignment.json` for a couple of Area_3 rooms and
+  compare the refined pose to GT (D25 already showed a correct-room seed -> oracle-quality pose) — then
+  Electron/pipeline wiring. All LOCAL on `feat/deploy-regime` (commits 45b5389..06dcdd2 + this docs commit),
+  nothing pushed.
+
 ## Current state (2026-07-14 latest4 — larger-n validation CONFIRMS D30+D32; deployable seeder shipped, D33; branch feat/deploy-regime)
 - User greenlit "validate on more panos, then wire in." Built a diverse 8-room pool (office/hallway/lounge/
   conference/WC) with all in-frame panos = **32 panos** (2.7x n), localized each vs all 8 rooms (~99 min GPU),
@@ -184,6 +209,22 @@ _Newest first. Update at the END of every session: what changed, what's next, wh
 - Plans: v0 `docs/plans/2026-07-08-coarse-room-cpo-v0.md`; Plan 2 (cheap Tier-1) ABANDONED. Decisions D14–D24.
 
 ## Session log
+
+### 2026-07-15 — PanoPin->FGPL alignment export (Tasks 1-6, D34)
+- Traced FGPL's real consumer before wiring D33's seed hand-off:
+  `multiroom_pose_estimation.load_panorama_positions` reads matches per-pano, positional-only (only
+  `pano_name` + `camera_position` load-bearing). Wrote spec
+  `docs/specs/2026-07-15-fgpl-alignment-export-design.md` + plan
+  `docs/plans/2026-07-15-fgpl-alignment-export.md`; executed subagent-driven, Tasks 1-6 all green (ledger
+  `.superpowers/sdd/progress.md`).
+- Task 1 (45b5389) `raw_t_to_camera_position` frame guard; Task 2 (d2463ab) `build_matches` gate + coverage
+  backstop; Task 3 (9c449a0) `write_alignment_json`; Task 4 (fe66aa5) `export_alignment` convenience wrapper;
+  Task 5 (06dcdd2) integration smoke through FGPL's real loader — PASSED, not skipped, positions recover to
+  1e-6. Full suite `12 passed, 2 warnings in 0.20s`.
+- Task 6 (this entry): recorded D34, this PROGRESS entry, and `docs/tasks.json` (`T4b` added done/passing;
+  `T4` left open, cross-referenced).
+- **STOPPED** after Task 6. **NEXT** = spec §8 fast-follow (live FGPL GPU round-trip on a couple of Area_3
+  rooms vs GT), then Electron/pipeline wiring. All LOCAL on `feat/deploy-regime`, nothing pushed.
 
 ### 2026-07-09 (latest) — cheap Tier-1 gate failure → GPU → speed characterized → prototype timing
 - Wrote spec+plan for a cheap Tier-1 (skip the ~20 s inlier detection); executed subagent-driven. Tasks 1–2
