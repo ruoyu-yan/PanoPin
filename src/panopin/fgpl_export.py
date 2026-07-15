@@ -31,3 +31,43 @@ def raw_t_to_camera_position(t_raw, R_meta, tol=1e-6):
         raise ValueError(
             f"frame round-trip failed (metadata rotation not yaw-like?): {back} vs {t[:2]}")
     return [float(cam[0]), float(cam[1])]
+
+
+def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_coverage=True):
+    """Per-pano gate + coverage backstop -> (matches, admitted_pano_names).
+
+    Gate: admit each pano at its winner (argmin) room iff winner_score <= tau; weak-lock panos
+    are omitted. Backstop (guarantee_coverage): any room in room_order with no admitted pano is
+    seeded by its best UNASSIGNED pano (keeps per-pano uniqueness; equals the D32 room-anchored
+    pick in the common all-covered case). Each pano appears at most once."""
+    if not score_matrix:
+        return [], []
+    assigned = {}   # pano -> room, at most one room per pano
+    for pano, (room, neg_score) in coverage.pano_confidence(score_matrix).items():
+        if -neg_score <= tau:
+            assigned[pano] = room
+    covered = set(assigned.values())
+    if guarantee_coverage:
+        for room in room_order:
+            if room in covered:
+                continue
+            free = [p for p in score_matrix if p not in assigned]
+            if not free:
+                continue  # cannot cover without a duplicate emission; leave uncovered
+            best = min(free, key=lambda p: score_matrix[p][room])
+            assigned[best] = room
+            covered.add(room)
+    matches = []
+    for pano, room in assigned.items():
+        t, _R = poses[pano][room]
+        cam = raw_t_to_camera_position(t, R_meta)
+        matches.append({
+            "pano_name": pano,
+            "room_idx": room_order.index(room),
+            "room_label": room,
+            "score": float(score_matrix[pano][room]),
+            "rotation_deg": 0.0,
+            "camera_position": cam,
+        })
+    admitted_pano_names = [m["pano_name"] for m in matches]
+    return matches, admitted_pano_names
