@@ -28,33 +28,50 @@
     {
       "id": "T3",
       "title": "Implement solver v0 that beats the random baseline on room accuracy",
-      "status": "in_progress",
+      "status": "superseded",
       "passes": false,
       "verify": "python eval/score.py --predictions runs/<solver>.json --area Area_3  ->  room accuracy >> 0.06",
-      "notes": "Method DEMONSTRATED to beat baseline (5.9%): recall@1=14/18 (78%) on 3x3-room prototype sets vs their own segments, and office_3 rank 1/23 vs whole Area_3 (smoke/prototype_sets_timing.py, smoke/tier1_recall_full.py). NOT yet formally scored through eval/score.py (the cheap-Tier-1 solver was abandoned D18-D20; the working 'solver' is the full localize_pair on panopin-gpu, ~25 s/room). To formally close T3: wire manifest->predictions with full localize_pair and run score.py. Speed: whole-area is ~7 min/pano (~9-18 h full eval); prototype (3-5 rooms) ~1-2 min/pano."
+      "notes": "Method DEMONSTRATED to beat baseline (5.9%): recall@1=14/18 (78%) on 3x3-room prototype sets, office_3 rank 1/23 vs whole Area_3. SUPERSEDED 2026-07-15: the project pivoted to the FGPL-seed framing (D25-D35) where the deployment metric became per-ROOM coverage (D32/D35), not eval/score.py room-accuracy; that eval/score.py verify was never run and won't be. The working solver (full localize_pair + low_percentile_scores, D30) beats baseline overwhelmingly and is validated end-to-end via the FGPL round-trip (T6/D35). passes stays false to stay honest about the original, now-superseded verify."
     },
     {
       "id": "T4",
       "title": "Add coarse pose seed + define the FGPL hand-off",
-      "status": "todo",
+      "status": "superseded",
       "passes": false,
       "verify": "predictions include coarse_pose; score.py reports translation/rotation error; hand-off to FGPL documented in docs/",
-      "notes": "The 'hand-off to FGPL documented' half is now DONE via T4b (fgpl_export module + D34) — FGPL's real consumer was traced and a schema-exact demo6_alignment.json exporter shipped. Still open for T4: wiring coarse_pose into eval/predictions + score.py translation/rotation reporting (that uses eval/, not FGPL's own schema)."
+      "notes": "The core ('define the FGPL hand-off') is DONE + VALIDATED: T4b (fgpl_export module, D34) shipped a schema-exact demo6_alignment.json exporter after tracing FGPL's real consumer, and T6 (D35) proved it end-to-end through FGPL's real estimator (per-room coverage 6/6). SUPERSEDED 2026-07-15: the remaining sliver (wiring coarse_pose into eval/predictions + eval/score.py translation/rotation reporting) is superseded by measuring accuracy THROUGH FGPL (T6/D35, scored vs S3DIS GT) rather than through the eval/score.py harness. passes stays false re: the original eval/score.py-specific verify."
     },
     {
       "id": "T4b",
       "title": "PanoPin -> FGPL alignment export (gated per-pano seeds) — D34",
       "status": "done",
       "passes": true,
-      "verify": "conda run -n panopin python -m pytest tests/test_fgpl_export.py tests/test_fgpl_export_smoke.py -q  ->  12 passed, 2 warnings in 0.20s",
-      "notes": "src/panopin/fgpl_export.py (4 pure, no-GPU, no-CPO functions: raw_t_to_camera_position frame guard, build_matches gate tau=0.10 + room-anchored coverage backstop restricted to free panos, write_alignment_json, export_alignment). Tests tests/test_fgpl_export.py (10 unit) + tests/test_fgpl_export_smoke.py (2 integration-smoke: builds a real demo6_alignment.json from cached D33 largeval grids/poses and loads it back through FGPL's OWN load_panorama_positions -- PASSED not skipped, positions recover to 1e-6). Spec docs/specs/2026-07-15-fgpl-alignment-export-design.md; plan docs/plans/2026-07-15-fgpl-alignment-export.md. Commits 45b5389, d2463ab, 9c449a0, fe66aa5, 06dcdd2 (feat/deploy-regime, LOCAL, nothing pushed). Key finding: FGPL consumer trace re-scopes the D33 hand-off from per-room to per-pano (FGPL localizes each pano independently from its own seed). Fast-follow (out of scope, spec Sec8): live FGPL GPU round-trip on Area_3, then Electron/pipeline wiring."
+      "verify": "conda run -n panopin python -m pytest tests/test_fgpl_export.py tests/test_fgpl_export_smoke.py -q  ->  14 passed",
+      "notes": "src/panopin/fgpl_export.py (4 pure, no-GPU, no-CPO functions: raw_t_to_camera_position frame guard, build_matches gate tau=0.10 + room-anchored coverage backstop restricted to free panos, write_alignment_json, export_alignment). Tests tests/test_fgpl_export.py (11 unit) + tests/test_fgpl_export_smoke.py (2 integration-smoke: builds a real demo6_alignment.json from cached D33 largeval grids/poses and loads it back through FGPL's OWN load_panorama_positions -- PASSED not skipped, positions recover to 1e-6). Spec docs/specs/2026-07-15-fgpl-alignment-export-design.md; plan docs/plans/2026-07-15-fgpl-alignment-export.md. Merged to main + pushed (D34 lineage). Key finding: FGPL consumer trace re-scopes the D33 hand-off from per-room to per-pano (FGPL localizes each pano independently from its own seed)."
     },
     {
       "id": "T5",
       "title": "Robustness pass: all 85 Area_3 panos, log failures, tune",
       "status": "todo",
       "passes": false,
-      "verify": "a report over all 85 panos in runs/; failure cases noted in docs/PROGRESS.md"
+      "verify": "a report over all 85 panos in runs/; failure cases noted in docs/PROGRESS.md",
+      "notes": "Backlog. Lower priority than Option B (T7): the realistic deployment regime is 3-5 covered rooms (D30), so an all-85 pass is lower value. Cross-area generalization is the bigger open question."
+    },
+    {
+      "id": "T6",
+      "title": "Validate PanoPin->FGPL end-to-end (validation round-trip) — D35",
+      "status": "done",
+      "passes": true,
+      "verify": "conda run -n panopin python -m pytest tests/test_roundtrip.py -q -> 3 passed; AND conda run -n panopin python -m experiments.fgpl_seed.roundtrip -> 10/10 localized, per-room coverage 6/6 (experiments/fgpl_seed/ROUNDTRIP_RESULTS.md)",
+      "notes": "experiments/fgpl_seed/roundtrip.py: fgpl_export gated seed (tau=0.10) -> FGPL real estimator on the 6-room area3_seed_ablation subset -> score vs S3DIS GT next to cached oracle/p1. RESULT: plumbing PROVEN (10/10 localized, 0 errors); per-room coverage 6/6; right-room trans median 1.048m vs oracle 0.696 vs p1 0.998 (low-pct median ~tied p1 at n=10 = marginal, D31/D23 per-pano ceiling; win is coverage+tail); wrong-room 2/10 (coverage survives -> why per-ROOM is the metric); rotation ~105deg = FGPL Manhattan-aliasing (oracle 89.9deg), not PanoPin. Also served as the deferred D34 tau precision check THROUGH FGPL. Spec/plan docs/{specs,plans}/2026-07-15-fgpl-roundtrip*. Merged to main + pushed (bfb8fce). Caveats: Area_3 subset only; oracle/p1 ref used 12-pano Voronoi vs 10 here (reference, not controlled)."
+    },
+    {
+      "id": "T7",
+      "title": "Option B — production/Electron pipeline wiring (real Scan2BIM consumes PanoPin seeds)",
+      "status": "todo",
+      "passes": false,
+      "verify": "the real scan2measure-webframework pipeline (Electron) runs PanoPin seed_rooms + fgpl_export in place of the SAM3 jigsaw stage, with real non-identity metadata, producing a demo6_alignment.json that FGPL consumes end-to-end on a real project",
+      "notes": "THE NEXT STEP after D35. Cross-repo (scan2measure-webframework): replace the align_polygons_demo6 (SAM3 jigsaw) stage; use real density-image metadata (R != I, which exercises fgpl_export's frame round-trip guard for the first time in production). Optional precursors: larger-n / cross-area / controlled-Voronoi accuracy re-run of the round-trip (T6)."
     }
   ]
 }

@@ -27,7 +27,9 @@ _Newest first. Update at the END of every session: what changed, what's next, wh
 - **STOPPED** after recording D35 + this entry (Task 4). **NEXT** = Option B production/Electron
   pipeline wiring (real `demo6_alignment.json` seeds feeding the real Scan2BIM FGPL run); optional
   larger-n / cross-area validation of the round-trip. Branch `feat/fgpl-roundtrip` (commits a42f452,
-  4b0fedd, e6dec74, c9794bf, 76d2654, e2397fc + this docs commit), all LOCAL, nothing pushed.
+  4b0fedd, e6dec74, c9794bf, 76d2654, e2397fc, bfb8fce), then FF-merged to `main` + `git push
+  origin main` (76dea5c..bfb8fce, clean fast-forward); `origin/main == main == bfb8fce`; branch
+  `feat/fgpl-roundtrip` kept. **Session closed 2026-07-15 — remote current, working tree clean.**
 
 ## Current state (2026-07-15 — FGPL alignment export shipped: per-pano re-scope, gate+backstop, frame guard, D34; branch feat/deploy-regime)
 - Before wiring D33's `seed.seed_rooms` hand-off, traced FGPL's actual consumer
