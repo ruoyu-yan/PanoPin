@@ -109,3 +109,18 @@ def test_write_alignment_json_shape(tmp_path):
     assert d["metadata"]["pano_names"] == ["g1"]
     assert d["metadata"]["tau"] == 0.10
     assert d["matches"] == matches
+
+
+def test_export_alignment_end_to_end(tmp_path):
+    from panopin.fgpl_export import export_alignment
+    scores = {"g1": {"A": 0.06, "B": 0.30}, "g2": {"A": 0.30, "B": 0.07}}
+    poses = _poses({("g1", "A"): [1, 2, 0], ("g2", "B"): [3, 4, 0]})
+    meta_path = tmp_path / "metadata.json"
+    meta_path.write_text(json.dumps({"rotation_matrix": _ID}))
+    out = tmp_path / "demo6_alignment.json"
+    admitted = export_alignment(scores, poses, ["A", "B"], meta_path, out, tau=0.10)
+    assert sorted(admitted) == ["g1", "g2"]
+    d = json.loads(out.read_text())
+    assert d["metadata"]["pano_names"] == admitted
+    assert d["metadata"]["tau"] == 0.10
+    assert len(d["matches"]) == 2

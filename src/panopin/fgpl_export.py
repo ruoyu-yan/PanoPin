@@ -82,3 +82,15 @@ def write_alignment_json(matches, admitted_pano_names, out_path, extra_meta=None
         meta.update(extra_meta)
     with open(out_path, "w") as f:
         json.dump({"metadata": meta, "matches": matches}, f, indent=4)
+
+
+def export_alignment(score_matrix, poses, room_order, metadata_path, out_path,
+                     tau=0.10, guarantee_coverage=True):
+    """Read metadata.json rotation, build + write demo6_alignment.json, return admitted panos.
+    The caller MUST set FGPL cfg["pano_names"] to the returned list."""
+    with open(metadata_path) as f:
+        R_meta = json.load(f)["rotation_matrix"]
+    matches, admitted = build_matches(score_matrix, poses, room_order, R_meta,
+                                      tau=tau, guarantee_coverage=guarantee_coverage)
+    write_alignment_json(matches, admitted, out_path, extra_meta={"tau": tau})
+    return admitted
