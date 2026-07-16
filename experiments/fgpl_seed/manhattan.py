@@ -41,6 +41,12 @@ AVOID_ROOMS = frozenset({"storage_1", "storage_2"})
 # largeval INTERSECT Manhattan -> cached grids apply, no GPU needed for room assignment.
 POOL_ROOMS = [r for r in largeval.POOL_ROOMS if r in MANHATTAN_ROOMS]
 
+# Isolated FGPL namespace: the Manhattan map must NOT clobber work/linemap/ + work/clouds/
+# (the 6-room ablation map the cached oracle/p1/D35 arms were produced against).
+SCENE = "area3_manhattan"
+LINEMAP_SUBDIR = "linemap_manhattan"
+ARM = "manhattan_export"
+
 
 def build_pool():
     """Manhattan-only rows, reusing largeval's validated in-frame pano filter (D17)."""

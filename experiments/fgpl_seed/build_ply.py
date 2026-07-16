@@ -4,7 +4,8 @@ import numpy as np, open3d as o3d
 from experiments.fgpl_seed import paths, subset
 
 
-def build_combined_ply(rows):
+def build_combined_ply(rows, scene=None):
+    scene = scene or paths.SCENE
     clouds = sorted({r["cloud_txt"] for r in rows})
     xyz_all, rgb_all = [], []
     for c in clouds:
@@ -18,7 +19,7 @@ def build_combined_ply(rows):
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(xyz)
     pcd.colors = o3d.utility.Vector3dVector(np.clip(rgb, 0, 1))
-    out = paths.subdir("clouds") / f"{paths.SCENE}.ply"
+    out = paths.subdir("clouds") / f"{scene}.ply"
     o3d.io.write_point_cloud(str(out), pcd)
     return out
 
