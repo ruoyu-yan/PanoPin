@@ -2,6 +2,38 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-16 — strictly-Manhattan demo: PanoPin proven decisive (13.3m -> 0.08m); 180-degree flip diagnosed + upright prior shipped to scan2measure; two follow-on fixes refuted; D36)
+- User asked for a co-worker demo confined to **Manhattan-world rooms** (Point_360 `roadmap.md` §5),
+  with single-room `.ply` clouds so the search space is Manhattan too. Branch `feat/manhattan-demo`;
+  the FGPL-side fix on scan2measure branch `feat/upright-rotation-prior`.
+- **Blocker found first:** NEITHER validated pool is strictly Manhattan (D33 largeval holds 3 of the
+  4 non-Manhattan rooms; the D25/D35 subset holds 2) -> the D35 headline cannot be quoted as a
+  Manhattan result. New pool = largeval INTERSECT Manhattan = **5 rooms / 22 panos**, which keeps the
+  cached D33 grids usable (D30 rescoring argument). Map = 5.16M pts -> **3 exactly axis-aligned
+  principal directions, 0% unclassified** sparse lines.
+- **THE HEADLINE (for the presentation):** same panos, same map, same estimator, only the seeding
+  changes. **FGPL alone = 1/5 rooms, 82% wrong-room, 13.27 m.** +PanoPin = **5/5 rooms, 18%,
+  0.084 m**. The control settles the obvious objection: **the upright prior WITHOUT PanoPin = 13.32 m**
+  (i.e. no help) -- the prior fixes ORIENTATION, PanoPin fixes PLACEMENT, and placement was broken.
+- **Shipped (scan2measure, opt-in, default off):** upright rotation prior -- 8/12 aliased poses had
+  the camera ON ITS SIDE, 2 UPSIDE-DOWN (FGPL enumerates the full octahedral group; 20 of 24
+  candidates are impossible for tripod capture). 22-seed arm 0.960 -> 0.084 m, locked 10/22 -> 15/22,
+  zero regressions, XDF ~10x faster. **Does NOT solve the flip** (7/22 remain; residual is pure yaw).
+- **Two REFUTATIONS worth remembering:** (1) my cross-room test "disproving" pano-crowding was
+  confounded -- the intervention (identical seeds, 22 competing panos -> 4) recovers 3/4 aliased
+  panos, so crowding IS causal; (2) the per-room architecture (no Voronoi) is WORSE --
+  **the seed also PINS POSITION** (`fafa0629`: rotation locked 0.7 deg, 8.8 m down the hallway).
+- **Artifacts:** `experiments/fgpl_seed/MANHATTAN_PANOPIN_VS_FGPL.md` (the presentation doc; all
+  numbers regenerated from results JSONs), `MANHATTAN_RESULTS.md` (offline room assignment),
+  `MANHATTAN_SUMMARY.md`, `MANHATTAN_POSE_TABLE_manhattan_export.md`, `PERROOM_RESULTS.md`.
+  Scripts: `manhattan{,_analysis,_map,_roundtrip,_report,_summary,_presentation,_perroom}.py`.
+- **STOPPED** after docs + push. **NEXT** = (a) **room-scoped filtering** (filter `get_local_mask` by
+  `room_label` -- which PanoPin already sends and FGPL only prints -- while KEEPING the per-pano seed:
+  whole-room geometry AND pinned position; the untested middle, even odds); (b) ship the **rotation
+  margin** confidence signal (best minus 2nd-best `n_tight` across distinct rotations: 42/44, ZERO
+  false positives; `multiroom_pose_estimation.py:471` already computes it and throws the runner-up
+  away); (c) cross-area validation. Full detail + caveats in **D36**.
+
 ## Current state (2026-07-15 latest — FGPL round-trip measured through FGPL: coverage 6/6, ~1.05m right-room, D35; branch feat/fgpl-roundtrip)
 - Executed the D34 spec §8 fast-follow: built the `fgpl_export` seed (gated at `tau=0.10`) on the
   `area3_seed_ablation` 6-room subset (office_1/4/5/6/7 + hallway_3, 12 in-frame panos), ran FGPL's

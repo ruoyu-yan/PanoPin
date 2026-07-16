@@ -619,3 +619,81 @@ test `tests/test_roundtrip.py` (3/3); results `experiments/fgpl_seed/ROUNDTRIP_R
   the real Scan2BIM FGPL run); optional larger-n / cross-area validation of this round-trip.
 - Commits: a42f452, 4b0fedd, e6dec74, c9794bf, 76d2654, e2397fc. All LOCAL on `feat/fgpl-roundtrip`,
   nothing pushed.
+
+## D36 — Strictly-Manhattan demo: PanoPin is what makes multi-room FGPL work (13.3m → 0.08m); the 180° flip diagnosed, an upright prior shipped, two follow-on fixes REFUTED (2026-07-16)
+**Context.** User asked for a co-worker demo confined to Manhattan-world rooms (Point_360 `roadmap.md`
+§5 classification), using single-room `.ply` clouds so the search space is Manhattan too: run PanoPin
++ the scan2measure pose unit on the panos in those rooms, score vs S3DIS GT. Branch
+`feat/manhattan-demo`; scan2measure work on `feat/upright-rotation-prior`.
+
+- **NEITHER previously-validated pool is strictly Manhattan.** The D33 largeval pool contains 3 of
+  Area_3's 4 non-Manhattan rooms (office_3/7/8); the D25/D35 subset contains 2 (office_4/7). So the
+  D35 headline numbers CANNOT be quoted as Manhattan results. New pool = largeval ∩ Manhattan =
+  **5 rooms / 22 panos** (office_5, hallway_1, lounge_1, conferenceRoom_1, WC_1), which keeps the
+  cached D33 grids usable (per-(pano,room) localizations are independent → restricting the candidate
+  set offline == only ever searching those rooms, the D30 rescoring argument). Keeps the real
+  loss-sink (hallway_1) and stays diverse. `manhattan.py`.
+- **The Manhattan restriction is visibly correct:** the 5-room map (5.16M pts) yielded 3 **exactly
+  axis-aligned** principal directions with **0% unclassified** sparse lines — the Stage-3
+  3-orthogonal-direction assumption fits perfectly, which office_3/7/8's diagonal walls would break.
+- **Room assignment (offline, cached, no GPU):** room-anchored **5/5 correct**, per-room coverage
+  100%, winner-gate@precision-1 100%; per-pano low-pct **82%** vs raw CPO **64%**. All 4 per-pano
+  misses rank in the bottom 5 by confidence (D32 reproduces under strict Manhattan).
+  `MANHATTAN_RESULTS.md`.
+- **THE HEADLINE — FGPL cannot do multi-room alone.** Same 22 panos, same map, same estimator; only
+  the seeding changes: **FGPL alone (global mode, seed never read) = 1/5 rooms, 82% wrong-room,
+  13.27 m median.** +PanoPin = **5/5 rooms, 18%, 0.96 m** (0.084 m with the prior, below). This is
+  the "cross-room false minima" the Voronoi exists to prevent, and it quantifies PanoPin's value.
+  It also **refutes "give FGPL more search area"**: global mode IS that idea's maximum.
+- **The 5-seed room-anchored config** (1 seed/room) = 5/5 rooms, 0% wrong-room, **0.045 m, 0 flips** —
+  but it poses **5 panos, not 22**. D34 established the hand-off is per-PANO (FGPL localizes each
+  pano from its own seed), so this is NOT a substitute; it answers the narrower "one good entry
+  point per room" question.
+- **180° flip DIAGNOSED (scan2measure).** The fix (QUERY_SPHERE_LEVEL=3, TOP_K=10, n_tight selection)
+  IS active in multiroom — it was starved, not bypassed. Of 12 aliased poses: **8 had the camera ON
+  ITS SIDE, 2 UPSIDE-DOWN, only 2 true yaw flips.** `build_rotation_candidates` enumerates the full
+  octahedral group (24), so 20 candidates tip/invert the camera — impossible for tripod capture.
+- **SHIPPED: opt-in upright prior** (scan2measure `feat/upright-rotation-prior`, spec
+  `docs/superpowers/specs/2026-07-16-upright-rotation-prior-design.md`). 22-seed arm: trans median
+  **0.960 → 0.084 m**, rot median 89.9 → 1.8°, locked 10/22 → 15/22, **zero regressions**, XDF search
+  **~10x faster** (24 → 4 candidates). Default off; single-room pipeline and TMB untouched.
+- **The prior ALONE does not rescue FGPL (control):** FGPL+prior WITHOUT PanoPin = **13.32 m** (vs
+  13.27 m as-is), rooms 1/5 → 3/5. The two contributions fix different failures — the prior picks a
+  better ORIENTATION only once you are in the right PLACE, and placement was what broke.
+- **It does NOT solve the flip.** 7/22 still alias (3 are wrong-ROOM panos = PanoPin errors; among
+  right-room panos 9/19 → 4/19). The 4 surviving candidates differ only by yaw. **Read the medians as
+  "which side of a bimodal split most panos are on", NOT as error magnitudes** — the flipped group
+  shrank in COUNT, not in error (survivors still 88-180°).
+- **REFUTED #1 — "multiple panos per room causes the flips" was RIGHT as a mechanism but my
+  cross-room test was wrong.** hallway_1 has the MOST panos and the BEST lock rate; lounge_1 has
+  fewer and fails 4/4. The intervention settles it: identical seeds, 22 competing panos → 4, **3/4
+  aliased panos recover** (+127fc8df in the anchored arm). Cross-sectional correlation ≠ causation;
+  rooms have different geometry budgets. I also wrongly called lounge_1 "intrinsically ambiguous"
+  because the oracle failed there — the oracle ran with the SAME starved partition.
+- **REFUTED #2 — per-room architecture (per-room line map + global mode, no Voronoi) is WORSE.** On
+  the 18 correctly-assigned panos: locked 14/18 → **12/18**. `fafa0629` came back rotation-locked at
+  0.7° but **8.8 m down the hallway**. **The seed does TWO jobs: it starves the rotation search of
+  geometry AND it pins the position.** Removing it returns the geometry and discards the constraint.
+  The 5-seed arm wins by landing on both. `PERROOM_RESULTS.md`.
+- **`tau=0.10` does NOT transfer** to this pool (admits 21/22 including 3 wrong-room) — the score
+  distribution sits lower than the pool it was tuned on. Threshold-free room-anchored seeding is the
+  claim that holds. (Same trap as any absolute threshold.)
+- **UNSHIPPED lever — the rotation margin.** best minus second-best `n_tight` across DISTINCT
+  rotations separates good from aliased **42/44 with ZERO false positives** (good 3-56, aliased
+  0-11; several aliased poses have margin **0** — an exact tie broken arbitrarily). Unlike absolute
+  `n_tight` it is computed WITHIN a pano, so it avoids the tau calibration trap.
+  `multiroom_pose_estimation.py:471` computes every ingredient and discards the runner-up;
+  `n_tight`/`avg_dist`/line counts are already persisted to `local_filter_results.json`.
+- **Process note — the falsifiable prediction earned its keep twice.** The first upright-prior
+  implementation filtered CANONICAL-frame candidates against a WORLD-frame gravity vector
+  (`canonical_rot = principal_3d`; the search emits `R_world = R_cand @ principal_3d`), selecting
+  exactly the wrong 4 → locked 10/22 → **0/22**. The unit test used `principal_3d = eye(3)`, which
+  collapses the two frames and hid the bug entirely (passed 5/5, proved nothing). The prediction
+  caught it immediately, and later stopped a genuine improvement being sold as a solved problem.
+- **NEXT.** (a) Room-scoped filtering — filter `get_local_mask` by `room_label` (which PanoPin
+  already sends and FGPL only prints, D34) while KEEPING the per-pano seed: geometry from the whole
+  room AND position still pinned. The untested middle; even odds. (b) Ship the rotation margin as a
+  confidence output. (c) Cross-area validation (everything is Area_3).
+- Caveats: Area_3 only, n=22, Manhattan rooms only. The nearest-centroid room metric misjudges
+  boundary panos (`5c2959c3` is 2.9 cm from GT yet scored wrong-room), so 18% wrong-room is slightly
+  pessimistic.

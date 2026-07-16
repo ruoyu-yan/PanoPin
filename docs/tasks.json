@@ -43,7 +43,7 @@
     },
     {
       "id": "T4b",
-      "title": "PanoPin -> FGPL alignment export (gated per-pano seeds) — D34",
+      "title": "PanoPin -> FGPL alignment export (gated per-pano seeds) \u2014 D34",
       "status": "done",
       "passes": true,
       "verify": "conda run -n panopin python -m pytest tests/test_fgpl_export.py tests/test_fgpl_export_smoke.py -q  ->  14 passed",
@@ -59,7 +59,7 @@
     },
     {
       "id": "T6",
-      "title": "Validate PanoPin->FGPL end-to-end (validation round-trip) — D35",
+      "title": "Validate PanoPin->FGPL end-to-end (validation round-trip) \u2014 D35",
       "status": "done",
       "passes": true,
       "verify": "conda run -n panopin python -m pytest tests/test_roundtrip.py -q -> 3 passed; AND conda run -n panopin python -m experiments.fgpl_seed.roundtrip -> 10/10 localized, per-room coverage 6/6 (experiments/fgpl_seed/ROUNDTRIP_RESULTS.md)",
@@ -67,11 +67,35 @@
     },
     {
       "id": "T7",
-      "title": "Option B — production/Electron pipeline wiring (real Scan2BIM consumes PanoPin seeds)",
+      "title": "Option B \u2014 production/Electron pipeline wiring (real Scan2BIM consumes PanoPin seeds)",
       "status": "todo",
       "passes": false,
       "verify": "the real scan2measure-webframework pipeline (Electron) runs PanoPin seed_rooms + fgpl_export in place of the SAM3 jigsaw stage, with real non-identity metadata, producing a demo6_alignment.json that FGPL consumes end-to-end on a real project",
       "notes": "THE NEXT STEP after D35. Cross-repo (scan2measure-webframework): replace the align_polygons_demo6 (SAM3 jigsaw) stage; use real density-image metadata (R != I, which exercises fgpl_export's frame round-trip guard for the first time in production). Optional precursors: larger-n / cross-area / controlled-Voronoi accuracy re-run of the round-trip (T6)."
+    },
+    {
+      "id": "T8",
+      "title": "Strictly-Manhattan demo + 180-degree flip diagnosis (D36)",
+      "status": "done",
+      "passes": true,
+      "verify": "conda run -n panopin python -m experiments.fgpl_seed.manhattan_presentation  ->  regenerates MANHATTAN_PANOPIN_VS_FGPL.md from work/results/*.json (FGPL alone 1/5 rooms / 82% wrong-room / 13.27m vs +prior+PanoPin 5/5 / 18% / 0.084m)",
+      "notes": "Manhattan-only pool (5 rooms / 22 panos, largeval INTERSECT roadmap.md \u00a75). Neither prior pool was strictly Manhattan. HEADLINE: FGPL cannot do multi-room alone (82% wrong-room); PanoPin is what makes it work. Control: the upright prior WITHOUT PanoPin = 13.32m (no help) -- prior fixes orientation, PanoPin fixes placement. Shipped the upright prior to scan2measure (feat/upright-rotation-prior, opt-in): 0.960 -> 0.084m, locked 10/22 -> 15/22, ~10x faster XDF; does NOT solve the flip (7/22 remain, pure yaw). REFUTED: per-room architecture (the seed also pins position). Artifacts: MANHATTAN_{PANOPIN_VS_FGPL,RESULTS,SUMMARY,POSE_TABLE_*}.md + PERROOM_RESULTS.md."
+    },
+    {
+      "id": "T9",
+      "title": "Room-scoped line filtering in FGPL (keep the per-pano seed)",
+      "status": "todo",
+      "passes": false,
+      "verify": "multiroom_pose_estimation filters 3D lines by the seed's room_label instead of the pano-Voronoi, KEEPING the per-pano seed for position; re-run manhattan_upright -> rotation locked > 15/22 with no translation regression",
+      "notes": "The untested middle between the two refuted extremes. 22-seed Voronoi starves each pano of geometry (-> yaw aliasing); removing the partition entirely (per-room global mode) loses the position constraint and is WORSE (PERROOM_RESULTS.md: fafa0629 locked 0.7deg but 8.8m down the hallway). Room-scoped filtering keeps BOTH: whole-room geometry AND a pinned position. Needs room_label, which PanoPin already sends and FGPL only prints (D34). Even odds -- write a falsifiable prediction BEFORE running (it caught both of today's errors)."
+    },
+    {
+      "id": "T10",
+      "title": "Ship the rotation-margin confidence signal in FGPL",
+      "status": "todo",
+      "passes": false,
+      "verify": "multiroom_pose_estimation emits a per-pose rotation margin (best minus best-of-other-rot_idx n_tight) into local_filter_results.json; margin >= 13 certifies good poses with zero false positives on the manhattan arms",
+      "notes": "Detects what neither fix cures: 42/44 separation, ZERO false positives (good margins 3-56, aliased 0-11; several aliased poses have margin 0 = an exact tie broken arbitrarily by the sort). Computed WITHIN a pano so it avoids the absolute-threshold calibration trap that sank tau=0.10. multiroom_pose_estimation.py:471 already computes every candidate's n_tight and discards the runner-up; rot_idx is on top_poses[i]. Threshold 13 is tuned on one scene -- validate elsewhere."
     }
   ]
 }

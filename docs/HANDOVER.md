@@ -1,4 +1,47 @@
-# PanoPin — Handover (end of 2026-07-10)
+# PanoPin — Handover
+
+> **This file was written 2026-07-10 and its instructions are STALE.** Its "next step" (wire v1
+> calibration into the seed) was done and **refuted** (D26). Do **not** follow it. The current
+> state lives in `docs/PROGRESS.md` (top block) + `docs/DECISIONS.md` (**D36** newest). The
+> 2026-07-10 content is kept below only as history.
+
+**Read order (2026-07-16):** `docs/PROGRESS.md` top block -> `docs/DECISIONS.md` **D36** (today),
+then **D30-D35** (the deployment line) -> `docs/tasks.json` (**T9**, **T10** are the open work) ->
+`experiments/fgpl_seed/MANHATTAN_PANOPIN_VS_FGPL.md` (the presentation doc).
+
+## What PanoPin is
+A fast, deterministic **coarse panorama->room seed** (which room + rough position) handed to
+**FGPL** (the fine geometric localizer in `/home/ruoyu/scan2measure-webframework/`) so pose
+estimation works on large, repetitive multi-room buildings where the thesis' shape-based jigsaw
+fails. Method = **CPO render-and-compare on COLOR** (not shape).
+
+## The one-line result (2026-07-16, D36)
+On a strictly-Manhattan 5-room / 22-pano Area_3 scene, same map and estimator throughout:
+**FGPL alone = 1/5 rooms, 82% wrong-room, 13.27 m median. +PanoPin = 5/5 rooms, 18%, 0.084 m.**
+The rooms are near-identical in shape, so FGPL's geometry cannot tell them apart and colour can.
+That is the whole argument.
+
+## Facts a new session MUST know
+- **Envs (never mix):** FGPL estimator + CPO -> `panopin-gpu`; FGPL build tools (baker/cluster/
+  features) -> `scan_env`; PanoPin tests/harness -> `panopin`.
+- **The hand-off is per-PANO** (D34): FGPL localizes each pano from its own seed, and consumes only
+  `camera_position` from `demo6_alignment.json` (`room_label`/`rotation_deg` are ignored -- room_label
+  appears only in a `print`). Seeding one pano per room poses ONE pano, not the room's others.
+- **The seeds ARE the Voronoi partition.** More seeds -> smaller cells -> less 3D geometry per pano
+  -> rotation aliasing. But the seed also **pins position**: removing the partition entirely is
+  WORSE (`PERROOM_RESULTS.md` -- `fafa0629` locked rotation at 0.7 deg and landed 8.8 m down a
+  hallway). Both refuted extremes are documented in D36; the untested middle is **T9**.
+- **Absolute thresholds do not transfer.** `tau=0.10` (D34) admits 21/22 including 3 wrong-room panos
+  on the Manhattan pool. Prefer threshold-free (room-anchored) or within-pano relative signals (the
+  rotation margin, T10).
+- **Read bimodal medians with care.** Poses either lock (~1 deg) or flip (~90-180 deg), nothing
+  between; a median only reports which side most panos are on, NOT the error size.
+- **Rotation flips are FGPL's, not PanoPin's** -- they happen with a GT seed too.
+- `work/` is gitignored (514 MB of caches); committed numbers live in the `*_RESULTS.md` files.
+
+---
+
+# HISTORICAL — the 2026-07-10 handover (superseded; read for context only)
 
 **Read order:** this file → `docs/PROGRESS.md` (top "Current state" block) → `docs/DECISIONS.md` **D25**
 (today) + **D14–D24** (v1) → `experiments/fgpl_seed/RESULTS.md` (today's numbers) →
