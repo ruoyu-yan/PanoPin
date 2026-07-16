@@ -35,11 +35,18 @@
 
 Arm 2 changes two things at once, so the obvious question is whether the rotation fix is doing the work rather than PanoPin. The control answers it: FGPL **with** the upright prior but **without** PanoPin.
 
-_Control arm still running — this section will be filled in when it lands._
+| | FGPL as-is | + prior only | **+ prior + PanoPin** |
+|---|---|---|---|
+| Rooms covered | 1/5 | 3/5 | **5/5** |
+| Wrong-room rate | 82% | 73% | **18%** |
+| Translation median | 13.27 m | 13.32 m | **0.084 m** |
+| Rotation median | 134.2° | 89.9° | **1.8°** |
 
-## The shipping configuration does better still
+The two contributions fix different failures, and both are needed. The prior removes physically impossible camera orientations — a rotation fix. PanoPin decides which room a panorama is in — a placement fix. **Placement is what was actually broken**, which is why the prior alone does not rescue the baseline.
 
-The arm above seeds *every* pano. The shipping design seeds **one best pano per room** (`coverage.room_anchored_seeds`), which is all FGPL needs — one correct entry point per room. Still no ground truth.
+## A narrower question: one good entry point per room
+
+The arm above seeds *every* pano, which is what a virtual tour needs — every panorama is a viewpoint. A different configuration seeds only the **single best pano per room** (`coverage.room_anchored_seeds`, 5 seeds). It is **not a substitute**: FGPL localizes each pano from its own seed, so this poses 5 panos, not 22. But it answers a narrower question cleanly — *can PanoPin give each room one trustworthy entry point?* Still no ground truth.
 
 | PanoPin room-anchored (5 seeds, 1/room) | value |
 |---|---|
@@ -49,7 +56,9 @@ The arm above seeds *every* pano. The shipping design seeds **one best pano per 
 | Rotation median error | **0.4°** |
 | Rotation flips (>45°) | **0/5** |
 
-All 5 room seeds were correct, chosen threshold-free. _(measured on the pre-prior estimator; the prior-on re-run is still going and is expected to match or beat it — it already has zero flips.)_
+All 5 room seeds were correct, chosen threshold-free — every room gets a usable entry point.
+
+Why it is better: with 5 seeds instead of 22, each pano's search region is roughly a whole room rather than a sliver of one, so the rotation search has enough 3D geometry to resolve the true rotation from its 180° twin. That is also why it cannot simply be adopted for all 22 panos — the seeds *are* the partition, so more panos means smaller regions. Removing the partition entirely was tested and is worse (`PERROOM_RESULTS.md`): the seed also pins position, and without it a pano can lock rotation perfectly yet land 8.8 m down a corridor.
 
 ## Per-pano: estimated pose vs ground truth
 
@@ -95,10 +104,8 @@ Position in raw S3DIS metres; error is 3D Euclidean distance to GT and the geode
 
 | | FGPL + prior + PanoPin | GT-seeded (upper bound) |
 |---|---|---|
-| Translation median | 0.084 m | 0.113 m |
-| Rotation median | 1.8° | 1.3° |
-| Rotation flips (>45°) | 7/22 | 9/22 |
+| Translation median | 0.084 m | 0.076 m |
+| Rotation median | 1.8° | 1.5° |
+| Rotation flips (>45°) | 7/22 | 7/22 |
 
 The GT-seeded arm flips too, which is the point: **rotation flips are FGPL's behaviour, not a symptom of PanoPin's seed being imprecise.** Where PanoPin puts a pano in the right room and FGPL locks the rotation, the pose is centimetre-accurate — matching what a perfect seed achieves.
-
-_(GT-seeded arm measured on the pre-prior estimator; the prior-on re-run is still going.)_

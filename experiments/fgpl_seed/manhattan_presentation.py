@@ -158,10 +158,13 @@ def main():
                        "going and is expected to match or beat it — it already has zero flips.)_")
     D = _stats(deploy_arm, list(json.load(open(paths.WORK / "results" /
                                                f"{deploy_arm}.json"))["true_room"]), gt)
-    out("## The shipping configuration does better still\n")
-    out("The arm above seeds *every* pano. The shipping design seeds **one best pano per room** "
-        "(`coverage.room_anchored_seeds`), which is all FGPL needs — one correct entry point per "
-        "room. Still no ground truth.\n")
+    out("## A narrower question: one good entry point per room\n")
+    out("The arm above seeds *every* pano, which is what a virtual tour needs — every panorama is "
+        "a viewpoint. A different configuration seeds only the **single best pano per room** "
+        "(`coverage.room_anchored_seeds`, 5 seeds). It is **not a substitute**: FGPL localizes "
+        "each pano from its own seed, so this poses 5 panos, not 22. But it answers a narrower "
+        "question cleanly — *can PanoPin give each room one trustworthy entry point?* Still no "
+        "ground truth.\n")
     out("| PanoPin room-anchored (5 seeds, 1/room) | value |")
     out("|---|---|")
     out(f"| Rooms covered | **{D['cov']['n_covered']}/{D['cov']['n_rooms']}** |")
@@ -169,7 +172,15 @@ def main():
     out(f"| Translation median error | **{st.median(D['dt']):.3f} m** |")
     out(f"| Rotation median error | **{st.median(D['dr']):.1f}°** |")
     out(f"| Rotation flips (>45°) | **{sum(1 for x in D['dr'] if x > 45)}/{D['n']}** |")
-    out(f"\nAll 5 room seeds were correct, chosen threshold-free.{deploy_note}\n")
+    out(f"\nAll 5 room seeds were correct, chosen threshold-free — every room gets a usable "
+        f"entry point.{deploy_note}\n")
+    out("Why it is better: with 5 seeds instead of 22, each pano's search region is roughly a "
+        "whole room rather than a sliver of one, so the rotation search has enough 3D geometry "
+        "to resolve the true rotation from its 180° twin. That is also why it cannot simply be "
+        "adopted for all 22 panos — the seeds *are* the partition, so more panos means smaller "
+        "regions. Removing the partition entirely was tested and is worse "
+        "(`PERROOM_RESULTS.md`): the seed also pins position, and without it a pano can lock "
+        "rotation perfectly yet land 8.8 m down a corridor.\n")
 
     out("## Per-pano: estimated pose vs ground truth\n")
     out("Position in raw S3DIS metres; error is 3D Euclidean distance to GT and the geodesic "
