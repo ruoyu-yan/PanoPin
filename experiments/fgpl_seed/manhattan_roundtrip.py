@@ -35,6 +35,22 @@ SEEDS = paths.WORK / "seeds"
 TAU_ADMIT_ALL = 1.0     # every pano seeded: the demo asks for a pose per pano
 TAU_GATE = 0.10         # the D34 deployment gate, reported as an offline slice
 
+# arm -> (seed kind, upright rotation prior). The prior is a property of the ESTIMATOR and the
+# seed kind is a property of PANOPIN, so they are orthogonal: any fair comparison across seed
+# kinds must hold the prior fixed (a table mixing prior-on and prior-off arms changes two
+# variables at once).
+ARM_SPEC = {
+    "manhattan_global":            ("global", False),
+    "manhattan_global_upright":    ("global", True),
+    "manhattan_export":            ("export", False),
+    "manhattan_upright":           ("export", True),
+    "manhattan_oracle":            ("oracle", False),
+    "manhattan_oracle_upright":    ("oracle", True),
+    "manhattan_anchored":          ("anchored", False),
+    "manhattan_anchored_upright":  ("anchored", True),
+    "manhattan_aliased_solo":      ("solo", False),
+}
+
 
 def load_scores_poses(rows):
     """Cached low-pct scores + per-(pano,room) poses, confined to Manhattan panos x rooms."""
@@ -54,15 +70,15 @@ def build_seed(rows, md_path, arm, gt=None):
     scores, poses = load_scores_poses(rows)
     room_order = manhattan.POOL_ROOMS
     R_meta = np.array(json.load(open(md_path))["rotation_matrix"], float)
+    kind = ARM_SPEC[arm][0]
     path = SEEDS / f"{arm}.json"
-    if arm == "manhattan_global":
+    if kind == "global":
         # Seed is written for schema completeness only — global mode never reads it.
-        arm = "manhattan_export_for_global"
-        path = SEEDS / f"{arm}.json"
+        path = SEEDS / f"{arm}_seed_unused.json"
         admitted = fgpl_export.export_alignment(scores, poses, room_order, md_path, path,
                                                 tau=TAU_ADMIT_ALL)
         return path, admitted, scores
-    if arm == "manhattan_aliased_solo":
+    if kind == "solo":
         # Confirmation test: take panos that ALIASED in the 22-pano run despite a CORRECT
         # room seed, one per room, and re-run them with only 4 seeds so each gets ~its whole
         # room. Same seed positions as the 22-pano run -- the ONLY change is how many other
@@ -82,7 +98,7 @@ def build_seed(rows, md_path, arm, gt=None):
         fgpl_export.write_alignment_json(matches, admitted, path,
                                          extra_meta={"pipeline": "panopin:aliased-solo"})
         return path, admitted, scores
-    if arm == "manhattan_anchored":
+    if kind == "anchored":
         # The ACTUAL deployment config (D32/D33): one seed per room, room-anchored.
         # Also an unconfounded test of the geometry hypothesis -- 5 seeds means each
         # pano's Voronoi cell is ~its whole room, without touching FGPL's filter code.
@@ -98,7 +114,7 @@ def build_seed(rows, md_path, arm, gt=None):
         fgpl_export.write_alignment_json(matches, admitted, path,
                                          extra_meta={"pipeline": "panopin:room-anchored"})
         return path, admitted, scores
-    if arm == "manhattan_oracle":
+    if kind == "oracle":
         matches = [{"pano_name": r["pano_name"], "room_idx": room_order.index(r["room"]),
                     "room_label": r["room"], "score": 0.0, "rotation_deg": 0.0,
                     "camera_position": [float(x) for x in gt[r["pano_name"]]["location"][:2]]}
@@ -131,12 +147,16 @@ def main(arm="manhattan_export"):
     # manhattan_global = FGPL's ORIGINAL global mode: no Voronoi, no seed read at all
     # (load_panorama_positions is only called under use_local). This is the FGPL-alone
     # baseline AND the test of whether Voronoi local filtering starves panos of 3D lines.
-    use_local = arm != "manhattan_global"
+    kind, upright = ARM_SPEC[arm]
+    use_local = kind != "global"
+    extra = {"point_cloud_name": manhattan.SCENE, "point_cloud_path": str(ply)}
+    if upright:
+        # S3DIS raw frame is Z-up, so gravity is [0,0,1] in the cloud frame.
+        extra.update({"upright_prior": True, "up_world": [0.0, 0.0, 1.0],
+                      "max_tilt_deg": 10.0})
     cfg = sc.write_config(arm, admitted_rows, seed_path, line_map, md,
                           paths.WORK / "features", paths.WORK / "panos",
-                          use_local=use_local,
-                          extra={"point_cloud_name": manhattan.SCENE,
-                                 "point_cloud_path": str(ply)})
+                          use_local=use_local, extra=extra)
     poses = run_arm.run_arm(cfg, admitted_rows)
     poses_cw, s = roundtrip._score_cw(poses, gt, admitted_rows, cents)
     n_cov, n_rooms, covered = roundtrip.per_room_coverage(poses_cw, admitted_rows, all_rooms,
