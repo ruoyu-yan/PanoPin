@@ -25,7 +25,17 @@ sys.path.insert(0, os.path.join(_HERE, "..", ".."))
 from experiments.fgpl_seed import manhattan, paths, roundtrip
 from eval import s3dis_gt, metrics
 
+# Current estimator (upright rotation prior ON) — the fair like-for-like comparison.
 ARMS = [
+    ("manhattan_global_upright", "FGPL alone (no PanoPin)"),
+    ("manhattan_upright", "PanoPin, 22 seeds (1/pano)"),
+    ("manhattan_oracle_upright", "GT seed, 22 seeds (reference)"),
+    ("manhattan_anchored_upright", "PanoPin, 5 seeds (1/room) = DEPLOYMENT"),
+]
+
+# Same arms on the previous estimator (prior OFF), so the prior's contribution is visible
+# without contaminating the seeding comparison.
+ARMS_NOPRIOR = [
     ("manhattan_global", "FGPL alone (no PanoPin)"),
     ("manhattan_export", "PanoPin, 22 seeds (1/pano)"),
     ("manhattan_oracle", "GT seed, 22 seeds (reference)"),
@@ -64,20 +74,26 @@ def main():
     out("All arms share the same panos, map, features and estimator. **The only variable is how "
         "FGPL is seeded.**\n")
 
-    out("| configuration | panos posed | rooms covered | trans median | rot median | "
-        "rotation locked | wrong-room |")
-    out("|---|---|---|---|---|---|---|")
-    for arm, label in ARMS:
-        res = json.load(open(paths.WORK / "results" / f"{arm}.json"))
-        panos = list(res["true_room"])
-        dts, drs = _errs(arm, panos, gt)
-        lock = sum(1 for x in drs if x <= 45)
-        cov = res["coverage"]
-        out(f"| {label} | {len(dts)} | {cov['n_covered']}/{cov['n_rooms']} | "
-            f"{st.median(dts):.3f} m | {st.median(drs):.1f}° | {lock}/{len(drs)} | "
-            f"{res['scored']['wrong_room_rate']:.2f} |")
+    def table(arms):
+        out("| configuration | panos posed | rooms covered | trans median | rot median | "
+            "rotation locked | wrong-room |")
+        out("|---|---|---|---|---|---|---|")
+        for arm, label in arms:
+            res = json.load(open(paths.WORK / "results" / f"{arm}.json"))
+            panos = list(res["true_room"])
+            dts, drs = _errs(arm, panos, gt)
+            lock = sum(1 for x in drs if x <= 45)
+            cov = res["coverage"]
+            out(f"| {label} | {len(dts)} | {cov['n_covered']}/{cov['n_rooms']} | "
+                f"{st.median(dts):.3f} m | {st.median(drs):.1f}° | {lock}/{len(drs)} | "
+                f"{res['scored']['wrong_room_rate']:.2f} |")
 
-    out("\n## The three findings\n")
+    out("### Current estimator (upright rotation prior ON)\n")
+    table(ARMS)
+    out("\n### Previous estimator (prior OFF) — same arms, for reference\n")
+    table(ARMS_NOPRIOR)
+
+    out("\n## The four findings\n")
     out("**1. PanoPin is what makes multi-room work.** FGPL's own global search puts 18/22 panos "
         "in the WRONG ROOM (13.3 m median, 1/5 rooms covered) on same-shape rooms. PanoPin's "
         "seeds take that to 0.96 m and 5/5. This also refutes the 'give FGPL more search area' "
@@ -91,6 +107,16 @@ def main():
         "the number of competing panos changed (22 -> 4). **3/4 now lock** (+`127fc8df` in the "
         "anchored arm = 4/5 overall), with geometry rising 3-15x (e.g. `80e1f6ae` 99->302 dense "
         "lines: 179.4° -> 0.3°).\n")
+
+    out("**4. An upright rotation prior removes a whole class of impossible poses.** FGPL's 24 "
+        "rotation candidates are the full octahedral group, so 20 tip or invert the camera — "
+        "impossible for tripod capture. Of 12 aliased poses, 8 had the camera ON ITS SIDE and 2 "
+        "were UPSIDE-DOWN. Constraining candidates to upright (`upright_prior`, opt-in, shipped "
+        "on scan2measure branch `feat/upright-rotation-prior`) improved the 22-seed arm's "
+        "translation median 0.960 -> 0.084 m with zero regressions and a ~10x faster XDF "
+        "search. **It does not solve the flip**: the 4 surviving candidates differ only by yaw, "
+        "and 7/22 panos still alias. Read those medians as 'which side of a bimodal split most "
+        "panos are on', not as 'errors shrank'.\n")
 
     out("### Caveats — state these aloud\n")
     out("- **Not universal:** `d0834679` still flips at 179.7° with 481 dense lines (15x more). "

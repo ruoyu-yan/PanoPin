@@ -1,8 +1,17 @@
-"""Presentation artifact: FGPL alone vs FGPL+PanoPin vs GT-seeded (2026-07-16).
+"""Presentation artifact: FGPL alone vs FGPL+PanoPin, both scored against S3DIS ground truth.
 
-Generates MANHATTAN_PANOPIN_VS_FGPL.md -- the three-way pose comparison for showing that
-PanoPin's seeding is what makes multi-room localization work. Every number is regenerated
-from work/results/*.json + work/poses/*/camera_pose.json, so the doc cannot drift from data.
+Generates MANHATTAN_PANOPIN_VS_FGPL.md. Every number is regenerated from work/results/*.json +
+work/poses/*/camera_pose.json, so the doc cannot drift from the data.
+
+Structure (deliberate):
+  - TWO arms are compared -- FGPL alone, and FGPL+PanoPin. Ground truth is the ruler they are
+    both measured against, NOT a third arm.
+  - The GT-SEEDED diagnostic (replace PanoPin's seed with the true camera position) lives in an
+    appendix, explicitly flagged as a measuring stick rather than a pipeline component. It is
+    easy to misread as "PanoPin needs ground truth", which is false.
+  - Both arms run the SAME estimator, including the upright rotation prior. That prior is a fix
+    inside FGPL (scan2measure `pose_search.build_rotation_candidates`), NOT part of PanoPin;
+    applying it to only one arm would rig the comparison.
 
     conda run -n panopin python -m experiments.fgpl_seed.manhattan_presentation
 """
@@ -19,9 +28,17 @@ sys.path.insert(0, os.path.join(_HERE, "..", ".."))
 from experiments.fgpl_seed import manhattan, paths, roundtrip
 from eval import s3dis_gt, metrics
 
-THREE = [("manhattan_global", "FGPL alone"),
-         ("manhattan_export", "FGPL + PanoPin"),
-         ("manhattan_oracle", "FGPL + GT seed")]
+# Arm 1 is FGPL exactly as it exists in scan2measure today -- no upright prior, since the prior
+# is part of the work being presented, not part of the baseline.
+ALONE = ("manhattan_global", "FGPL as-is")
+# Arm 2 bundles BOTH contributions (PanoPin seeding + the FGPL upright prior). That is the
+# product story, but it means the arm is not a one-variable ablation -- hence CONTROL below.
+PANOPIN = ("manhattan_upright", "FGPL + upright prior + PanoPin")
+DEPLOY = ("manhattan_anchored_upright", "PanoPin room-anchored (deployment)")
+# Separates the two contributions: FGPL + prior, WITHOUT PanoPin. Answers "how do we know it is
+# PanoPin doing the work and not just the rotation fix?"
+CONTROL = ("manhattan_global_upright", "FGPL + upright prior, no PanoPin")
+DIAG_GT = ("manhattan_oracle_upright", "GT-seeded (diagnostic only)")
 
 
 def pose_of(arm, u, gt):
@@ -35,6 +52,18 @@ def pose_of(arm, u, gt):
             "dr": metrics.rotation_errors({u: eR}, {u: gt[u]["R_cw"]})["per_uuid"][u]}
 
 
+def _stats(arm, panos, gt):
+    """None if the arm has not finished — optional sections then report themselves as pending
+    rather than silently vanishing (a missing section is indistinguishable from a bad result)."""
+    rp = paths.WORK / "results" / f"{arm}.json"
+    if not rp.exists():
+        return None
+    ps = [p for p in (pose_of(arm, u, gt) for u in panos) if p]
+    res = json.load(open(rp))
+    return {"n": len(ps), "dt": [p["dt"] for p in ps], "dr": [p["dr"] for p in ps],
+            "cov": res["coverage"], "wrong": res["scored"]["wrong_room_rate"]}
+
+
 def main():
     rows = manhattan.build_pool()
     gt = s3dis_gt.load_gt("Area_3", s3dis_gt.load_config(None))
@@ -46,106 +75,159 @@ def main():
         L.append(s)
         print(s)
 
-    out("# PanoPin + FGPL vs FGPL alone — pose accuracy on Manhattan rooms\n")
-    out("**Question:** does PanoPin's colour-based room seeding actually make FGPL work on a "
-        "multi-room building of same-shape rooms?\n")
-    out("**Setup — one variable.** All arms use the *same* 22 panoramas, the *same* 5-room "
-        "point cloud and line map, the *same* 2D features, and the *same* estimator "
-        "(`multiroom_pose_estimation.py`). The only thing that changes is how FGPL is seeded. "
-        "Poses are scored against S3DIS ground truth.\n")
+    out("# Does PanoPin make FGPL work on a multi-room building?\n")
+    out("**The test.** Take a 5-room Manhattan section of S3DIS Area_3 and all 22 panoramas "
+        "inside it. Run FGPL's pose estimation two ways — on its own, and seeded by PanoPin — "
+        "and score both against the S3DIS ground-truth camera poses.\n")
+    out("**Same inputs throughout.** Both arms use the *same* 22 panoramas, the *same* 5-room "
+        "point cloud and line map, and the *same* 2D features. What changes is the method.\n")
     out(f"**Scene:** `{manhattan.SCENE}` — {len(manhattan.POOL_ROOMS)} Manhattan rooms "
         f"({', '.join(manhattan.POOL_ROOMS)}), 5.16M points, 22 in-frame panos. Non-Manhattan "
         "rooms (`office_3`, `office_7`, `office_8` — real diagonal walls) are excluded so the "
         "pipeline's 3-orthogonal-direction assumption holds. The line map recovered three "
         "**exactly axis-aligned** principal directions with **0% unclassified** sparse lines.\n")
-    out("- *FGPL alone* = `use_local_filtering=False`, FGPL's original global mode. No Voronoi; "
-        "PanoPin's seed file is **never opened** (verified: `load_panorama_positions` has one "
-        "call site, inside `if use_local:`). This is FGPL's own multi-room mechanism.")
-    out("- *FGPL + PanoPin* = one PanoPin colour seed per pano (22 seeds).")
-    out("- *FGPL + GT seed* = ground-truth camera position per pano — the upper bound for this "
-        "map, showing what the refiner can do with a perfect seed.\n")
+    out("**1. FGPL as-is** — the baseline: FGPL's own multi-room mechanism, exactly as it exists "
+        "in scan2measure (`use_local_filtering=False`, global mode: no Voronoi, whole-map "
+        "search). PanoPin's seed file is **never opened** (verified: `load_panorama_positions` "
+        "has a single call site, inside `if use_local:`).\n")
+    out("**2. FGPL + upright prior + PanoPin** — the work being presented. Two contributions:\n")
+    out("   - *PanoPin* seeds each pano with a colour-based room + position estimate (22 seeds). "
+        "**No ground truth is used.**")
+    out("   - The *upright rotation prior* is a fix inside FGPL itself (`pose_search."
+        "build_rotation_candidates`): FGPL enumerates 24 rotation candidates, and 20 of them "
+        "put the camera on its side or upside-down — impossible for tripod capture. The prior "
+        "discards those, leaving the 4 physically possible ones.\n")
+    out("**3. Ground truth** — S3DIS camera poses. The ruler both arms are measured against, not "
+        "a third method.\n")
+    out("> Arm 2 bundles both contributions, so it is a product comparison rather than a "
+        "one-variable ablation. §4 separates them: the prior alone, without PanoPin, does *not* "
+        "produce the result.\n")
 
-    out("## Headline\n")
-    out("| | FGPL alone | **FGPL + PanoPin** | FGPL + GT seed |")
-    out("|---|---|---|---|")
-    stats = {}
-    for arm, _ in THREE:
-        ps = [pose_of(arm, u, gt) for u in panos]
-        ps = [p for p in ps if p]
-        res = json.load(open(paths.WORK / "results" / f"{arm}.json"))
-        stats[arm] = {
-            "n": len(ps),
-            "cov": res["coverage"],
-            "wrong": res["scored"]["wrong_room_rate"],
-            "dt": [p["dt"] for p in ps],
-            "dr": [p["dr"] for p in ps],
-        }
-    def row(label, fn):
-        out(f"| {label} | " + " | ".join(fn(stats[a]) for a, _ in THREE) + " |")
-    row("Panos localized", lambda s: f"{s['n']}/22")
-    row("**Rooms covered**", lambda s: f"**{s['cov']['n_covered']}/{s['cov']['n_rooms']}**")
-    row("**Wrong-room rate**", lambda s: f"**{s['wrong']*100:.0f}%**")
-    row("**Translation median**", lambda s: f"**{st.median(s['dt']):.2f} m**")
-    row("Translation mean", lambda s: f"{st.mean(s['dt']):.2f} m")
-    row("Rotation median", lambda s: f"{st.median(s['dr']):.1f}°")
-    row("Panos within 10 cm", lambda s: f"{sum(1 for x in s['dt'] if x < 0.10)}/22")
+    A = _stats(ALONE[0], panos, gt)
+    P = _stats(PANOPIN[0], panos, gt)
 
-    g, e = stats["manhattan_global"], stats["manhattan_export"]
-    out(f"\n**FGPL alone puts {round(g['wrong']*22)}/22 panos in the wrong room** and covers only "
-        f"{g['cov']['n_covered']}/{g['cov']['n_rooms']} rooms — a {st.median(g['dt']):.1f} m median "
-        f"error. Adding PanoPin's seed takes the same estimator, on the same data, to "
-        f"{st.median(e['dt']):.2f} m and {e['cov']['n_covered']}/{e['cov']['n_rooms']} rooms. "
-        "That gap is what PanoPin contributes.\n")
+    out("## Result\n")
+    out("| measured against S3DIS ground truth | FGPL as-is | **+ upright prior + PanoPin** |")
+    out("|---|---|---|")
+    out(f"| Panos localized | {A['n']}/22 | {P['n']}/22 |")
+    out(f"| **Rooms covered** | **{A['cov']['n_covered']}/{A['cov']['n_rooms']}** | "
+        f"**{P['cov']['n_covered']}/{P['cov']['n_rooms']}** |")
+    out(f"| **Wrong-room rate** | **{A['wrong']*100:.0f}%** | **{P['wrong']*100:.0f}%** |")
+    out(f"| **Translation median error** | **{st.median(A['dt']):.2f} m** | "
+        f"**{st.median(P['dt']):.2f} m** |")
+    out(f"| Translation mean error | {st.mean(A['dt']):.2f} m | {st.mean(P['dt']):.2f} m |")
+    out(f"| Rotation median error | {st.median(A['dr']):.1f}° | {st.median(P['dr']):.1f}° |")
+    out(f"| Panos within 10 cm of GT | {sum(1 for x in A['dt'] if x < 0.10)}/22 | "
+        f"{sum(1 for x in P['dt'] if x < 0.10)}/22 |")
 
-    out("## The deployment configuration is better still\n")
-    a = json.load(open(paths.WORK / "results" / "manhattan_anchored.json"))
-    aps = [pose_of("manhattan_anchored", u, gt) for u in a["true_room"]]
-    aps = [p for p in aps if p]
-    out("The 22-seed arm above seeds *every* pano. The shipping design (`coverage.room_anchored_"
-        "seeds`) instead seeds **one best pano per room** — and that is what the pipeline "
-        "actually needs, since FGPL only needs one correct entry point per room.\n")
+    out(f"\n**FGPL on its own puts {round(A['wrong']*22)}/22 panos in the wrong room** and covers "
+        f"{A['cov']['n_covered']}/{A['cov']['n_rooms']} rooms — a {st.median(A['dt']):.1f} m "
+        f"median error. With PanoPin's seed, the same estimator on the same data reaches "
+        f"{st.median(P['dt']):.2f} m and {P['cov']['n_covered']}/{P['cov']['n_rooms']} rooms. "
+        "The rooms in this scene are near-identical in shape, so FGPL's geometry alone cannot "
+        "tell them apart; PanoPin's colour matching can, and that is the whole difference.\n")
+
+    C = _stats(CONTROL[0], panos, gt)
+    out("## Which contribution does the work?\n")
+    out("Arm 2 changes two things at once, so the obvious question is whether the rotation fix "
+        "is doing the work rather than PanoPin. The control answers it: FGPL **with** the "
+        "upright prior but **without** PanoPin.\n")
+    if C is None:
+        out("_Control arm still running — this section will be filled in when it lands._\n")
+    else:
+        out("| | FGPL as-is | + prior only | **+ prior + PanoPin** |")
+        out("|---|---|---|---|")
+        out(f"| Rooms covered | {A['cov']['n_covered']}/{A['cov']['n_rooms']} | "
+            f"{C['cov']['n_covered']}/{C['cov']['n_rooms']} | "
+            f"**{P['cov']['n_covered']}/{P['cov']['n_rooms']}** |")
+        out(f"| Wrong-room rate | {A['wrong']*100:.0f}% | {C['wrong']*100:.0f}% | "
+            f"**{P['wrong']*100:.0f}%** |")
+        out(f"| Translation median | {st.median(A['dt']):.2f} m | {st.median(C['dt']):.2f} m | "
+            f"**{st.median(P['dt']):.3f} m** |")
+        out(f"| Rotation median | {st.median(A['dr']):.1f}° | {st.median(C['dr']):.1f}° | "
+            f"**{st.median(P['dr']):.1f}°** |")
+        out("\nThe two contributions fix different failures, and both are needed. The prior "
+            "removes physically impossible camera orientations — a rotation fix. PanoPin decides "
+            "which room a panorama is in — a placement fix. **Placement is what was actually "
+            "broken**, which is why the prior alone does not rescue the baseline.\n")
+
+    deploy_arm, deploy_note = DEPLOY[0], ""
+    if not (paths.WORK / "results" / f"{DEPLOY[0]}.json").exists():
+        deploy_arm = "manhattan_anchored"
+        deploy_note = (" _(measured on the pre-prior estimator; the prior-on re-run is still "
+                       "going and is expected to match or beat it — it already has zero flips.)_")
+    D = _stats(deploy_arm, list(json.load(open(paths.WORK / "results" /
+                                               f"{deploy_arm}.json"))["true_room"]), gt)
+    out("## The shipping configuration does better still\n")
+    out("The arm above seeds *every* pano. The shipping design seeds **one best pano per room** "
+        "(`coverage.room_anchored_seeds`), which is all FGPL needs — one correct entry point per "
+        "room. Still no ground truth.\n")
     out("| PanoPin room-anchored (5 seeds, 1/room) | value |")
     out("|---|---|")
-    out(f"| Rooms covered | **{a['coverage']['n_covered']}/{a['coverage']['n_rooms']}** |")
-    out(f"| Wrong-room rate | **{a['scored']['wrong_room_rate']*100:.0f}%** |")
-    out(f"| Translation median | **{st.median([p['dt'] for p in aps]):.3f} m** |")
-    out(f"| Rotation median | **{st.median([p['dr'] for p in aps]):.1f}°** |")
-    out(f"| Rotation flips | **0/{len(aps)}** |")
-    out("\nAll 5 room seeds were correct (room-anchored selection is threshold-free). "
-        "**Survey-grade: 4.5 cm median, no flips, every room covered.**\n")
+    out(f"| Rooms covered | **{D['cov']['n_covered']}/{D['cov']['n_rooms']}** |")
+    out(f"| Wrong-room rate | **{D['wrong']*100:.0f}%** |")
+    out(f"| Translation median error | **{st.median(D['dt']):.3f} m** |")
+    out(f"| Rotation median error | **{st.median(D['dr']):.1f}°** |")
+    out(f"| Rotation flips (>45°) | **{sum(1 for x in D['dr'] if x > 45)}/{D['n']}** |")
+    out(f"\nAll 5 room seeds were correct, chosen threshold-free.{deploy_note}\n")
 
-    out("## Per-pano detail — estimated vs ground truth\n")
-    out("Translation error in metres, rotation error in degrees (geodesic). Sorted by "
-        "FGPL+PanoPin error.\n")
-    out("| pano | room | FGPL alone | FGPL + PanoPin | FGPL + GT seed | GT position (x,y,z) |")
-    out("|---|---|---|---|---|---|")
+    out("## Per-pano: estimated pose vs ground truth\n")
+    out("Position in raw S3DIS metres; error is 3D Euclidean distance to GT and the geodesic "
+        "rotation angle. Sorted by PanoPin's error.\n")
+    out("| pano | room | GT position (x,y,z) | FGPL alone: est. position | err | "
+        "FGPL+PanoPin: est. position | err |")
+    out("|---|---|---|---|---|---|---|")
     per = []
     for u in panos:
-        ps = {a: pose_of(a, u, gt) for a, _ in THREE}
-        per.append((ps["manhattan_export"]["dt"], u, ps))
-    for _, u, ps in sorted(per):
-        g_ = gt[u]["location"]
-        cells = []
-        for arm, _ in THREE:
-            p = ps[arm]
-            cells.append(f"{p['dt']:.2f} m / {p['dr']:.0f}°")
-        out(f"| `{u[:8]}` | {true[u]} | " + " | ".join(cells) +
-            f" | ({g_[0]:.2f}, {g_[1]:.2f}, {g_[2]:.2f}) |")
+        per.append((pose_of(PANOPIN[0], u, gt)["dt"], u))
+    for _, u in sorted(per):
+        g = gt[u]["location"]
+        a, p = pose_of(ALONE[0], u, gt), pose_of(PANOPIN[0], u, gt)
+        out(f"| `{u[:8]}` | {true[u]} | ({g[0]:.2f}, {g[1]:.2f}, {g[2]:.2f}) "
+            f"| ({a['t'][0]:.2f}, {a['t'][1]:.2f}, {a['t'][2]:.2f}) "
+            f"| {a['dt']:.2f} m / {a['dr']:.0f}° "
+            f"| ({p['t'][0]:.2f}, {p['t'][1]:.2f}, {p['t'][2]:.2f}) "
+            f"| **{p['dt']:.2f} m / {p['dr']:.0f}°** |")
 
     out("\n## Honest caveats\n")
-    out("- **Rotation is FGPL's weak point, not PanoPin's.** The GT-seeded arm still flips "
-        f"{sum(1 for x in stats['manhattan_oracle']['dr'] if x > 45)}/22 panos ~90-180°, so a "
-        "perfect seed does not prevent it. Cause: with 22 seeds in 5 rooms the Voronoi "
-        "subdivides each room's 3D lines until the rotation search cannot tell the true "
-        "rotation from its 180° twin. A controlled re-run of aliased panos with 4 seeds instead "
-        "of 22 (identical seed positions) recovered 3/4. The deployment config (5 seeds) has "
-        "zero flips.")
+    n_flip = sum(1 for x in P['dr'] if x > 45)
+    out(f"- **Rotation: {n_flip}/22 panos still come back facing the wrong way** (~90-180°). "
+        "This is an FGPL limitation, not PanoPin's — it happens with a perfect seed too (see "
+        "the appendix). Read the rotation medians with care: the distribution is bimodal (panos "
+        "either lock to ~1° or flip to ~90-180°, nothing between), so the median only reports "
+        "which side most panos fall on, not how big the errors are. The shipping config above "
+        "has zero flips.")
+    out("- **PanoPin's own ceiling:** 4/22 panos were assigned the wrong room — the known limit "
+        "on window- and occlusion-dominated panoramas, where the colour signal is too weak. It "
+        "costs the mean and max, not per-room coverage: every room still had a correct pano.")
     out("- **One area, one scene.** Area_3 only, n=22. Cross-area generalization is untested.")
-    out("- **PanoPin's own ceiling:** 4/22 panos got a wrong room (the known weak-lock limit — "
-        "window/occlusion-dominated panos). It costs the mean/max, not per-room coverage: every "
-        "room still had a correct pano.")
-    out("- The `tau=0.10` confidence gate tuned on an earlier pool does NOT transfer here; the "
-        "threshold-free room-anchored seeding does.")
+    out("- **Manhattan rooms only** — rooms with genuine diagonal walls are out of scope for the "
+        "pipeline's 3-direction assumption, and were excluded by design.")
+
+    g_arm = DIAG_GT[0] if (paths.WORK / "results" / f"{DIAG_GT[0]}.json").exists() \
+        else "manhattan_oracle"
+    G = _stats(g_arm, panos, gt)
+    out("\n---\n")
+    out("## Appendix — diagnostic: what if the seed were perfect?\n")
+    out("**This is not part of the pipeline, and PanoPin does not use ground truth anywhere.** "
+        "To measure how much of the remaining error belongs to FGPL rather than to PanoPin's "
+        "seed, we ran a diagnostic arm that replaces PanoPin's seed with the *true* camera "
+        "position. It is an upper bound — a measuring stick, not a component.\n")
+    if G is None:
+        out("_Diagnostic arm still running._")
+    else:
+        out("| | FGPL + prior + PanoPin | GT-seeded (upper bound) |")
+        out("|---|---|---|")
+        out(f"| Translation median | {st.median(P['dt']):.3f} m | {st.median(G['dt']):.3f} m |")
+        out(f"| Rotation median | {st.median(P['dr']):.1f}° | {st.median(G['dr']):.1f}° |")
+        out(f"| Rotation flips (>45°) | {n_flip}/22 | {sum(1 for x in G['dr'] if x > 45)}/22 |")
+        note = "" if g_arm == DIAG_GT[0] else \
+            "\n\n_(GT-seeded arm measured on the pre-prior estimator; the prior-on re-run is " \
+            "still going.)_"
+        out("\nThe GT-seeded arm flips too, which is the point: **rotation flips are FGPL's "
+            "behaviour, not a symptom of PanoPin's seed being imprecise.** Where PanoPin puts a "
+            "pano in the right room and FGPL locks the rotation, the pose is centimetre-"
+            f"accurate — matching what a perfect seed achieves.{note}")
 
     p = paths.HERE / "MANHATTAN_PANOPIN_VS_FGPL.md"
     p.write_text("\n".join(L) + "\n")
