@@ -55,6 +55,13 @@ def build_seed(rows, md_path, arm, gt=None):
     room_order = manhattan.POOL_ROOMS
     R_meta = np.array(json.load(open(md_path))["rotation_matrix"], float)
     path = SEEDS / f"{arm}.json"
+    if arm == "manhattan_global":
+        # Seed is written for schema completeness only — global mode never reads it.
+        arm = "manhattan_export_for_global"
+        path = SEEDS / f"{arm}.json"
+        admitted = fgpl_export.export_alignment(scores, poses, room_order, md_path, path,
+                                                tau=TAU_ADMIT_ALL)
+        return path, admitted, scores
     if arm == "manhattan_oracle":
         matches = [{"pano_name": r["pano_name"], "room_idx": room_order.index(r["room"]),
                     "room_label": r["room"], "score": 0.0, "rotation_deg": 0.0,
@@ -85,8 +92,13 @@ def main(arm="manhattan_export"):
                  for m in json.load(open(seed_path))["matches"]}
     print(f"[{arm}] {len(admitted)} seeds; rooms {all_rooms}", flush=True)
 
+    # manhattan_global = FGPL's ORIGINAL global mode: no Voronoi, no seed read at all
+    # (load_panorama_positions is only called under use_local). This is the FGPL-alone
+    # baseline AND the test of whether Voronoi local filtering starves panos of 3D lines.
+    use_local = arm != "manhattan_global"
     cfg = sc.write_config(arm, admitted_rows, seed_path, line_map, md,
                           paths.WORK / "features", paths.WORK / "panos",
+                          use_local=use_local,
                           extra={"point_cloud_name": manhattan.SCENE,
                                  "point_cloud_path": str(ply)})
     poses = run_arm.run_arm(cfg, admitted_rows)
