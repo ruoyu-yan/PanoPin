@@ -62,6 +62,26 @@ def build_seed(rows, md_path, arm, gt=None):
         admitted = fgpl_export.export_alignment(scores, poses, room_order, md_path, path,
                                                 tau=TAU_ADMIT_ALL)
         return path, admitted, scores
+    if arm == "manhattan_aliased_solo":
+        # Confirmation test: take panos that ALIASED in the 22-pano run despite a CORRECT
+        # room seed, one per room, and re-run them with only 4 seeds so each gets ~its whole
+        # room. Same seed positions as the 22-pano run -- the ONLY change is how many other
+        # panos compete for the map. If they now lock, pano-count-per-room is causal.
+        solo = {"conferenceRoom_1": "481b93c52f5144eb8557fbccf59262c9",
+                "hallway_1": "d0834679c83f4ecf997c4c808d151482",
+                "lounge_1": "80e1f6ae6c4b4e6dac81676ac86cacfb",
+                "WC_1": "f0e54fcd44df46cea3ac3bd97eab0bef"}
+        matches = []
+        for room, pano in solo.items():
+            t, _R = poses[pano][room]
+            matches.append({"pano_name": pano, "room_idx": room_order.index(room),
+                            "room_label": room, "score": float(scores[pano][room]),
+                            "rotation_deg": 0.0,
+                            "camera_position": fgpl_export.raw_t_to_camera_position(t, R_meta)})
+        admitted = [m["pano_name"] for m in matches]
+        fgpl_export.write_alignment_json(matches, admitted, path,
+                                         extra_meta={"pipeline": "panopin:aliased-solo"})
+        return path, admitted, scores
     if arm == "manhattan_anchored":
         # The ACTUAL deployment config (D32/D33): one seed per room, room-anchored.
         # Also an unconfounded test of the geometry hypothesis -- 5 seeds means each
