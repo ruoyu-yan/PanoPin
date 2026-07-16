@@ -62,6 +62,22 @@ def build_seed(rows, md_path, arm, gt=None):
         admitted = fgpl_export.export_alignment(scores, poses, room_order, md_path, path,
                                                 tau=TAU_ADMIT_ALL)
         return path, admitted, scores
+    if arm == "manhattan_anchored":
+        # The ACTUAL deployment config (D32/D33): one seed per room, room-anchored.
+        # Also an unconfounded test of the geometry hypothesis -- 5 seeds means each
+        # pano's Voronoi cell is ~its whole room, without touching FGPL's filter code.
+        anchored = coverage.room_anchored_seeds(scores)      # {room: (pano, score)}
+        matches = []
+        for room, (pano, sc_) in anchored.items():
+            t, _R = poses[pano][room]
+            matches.append({"pano_name": pano, "room_idx": room_order.index(room),
+                            "room_label": room, "score": float(sc_), "rotation_deg": 0.0,
+                            "camera_position": fgpl_export.raw_t_to_camera_position(t, R_meta)})
+        admitted = [m["pano_name"] for m in matches]
+        assert len(set(admitted)) == len(admitted), "a pano anchored two rooms; not handled"
+        fgpl_export.write_alignment_json(matches, admitted, path,
+                                         extra_meta={"pipeline": "panopin:room-anchored"})
+        return path, admitted, scores
     if arm == "manhattan_oracle":
         matches = [{"pano_name": r["pano_name"], "room_idx": room_order.index(r["room"]),
                     "room_label": r["room"], "score": 0.0, "rotation_deg": 0.0,
