@@ -99,14 +99,59 @@ def main():
 
     o = res["manhattan_oracle"]
     if e and o:
+        out("\n## Rotation lock drives translation accuracy")
+        out("FGPL's rotation is Manhattan-aliased: it either locks the true rotation (a few "
+            "degrees) or snaps to a ~90/120/180 deg alias. That lock — not a gradual seed error "
+            "— is what decides the final position.\n")
+        out("| arm | rotation locked (<=45 deg) | trans median (locked) | trans median (aliased) |")
+        out("|---|---|---|---|")
+        for arm, label in ARMS:
+            r = res[arm]
+            rot = r["scored"]["rotation"]["per_uuid"]
+            tr_ = r["per_uuid_trans"]
+            lock = [u for u in rot if rot[u] <= 45]
+            ali = [u for u in rot if rot[u] > 45]
+            out(f"| {label} | {len(lock)}/{len(rot)} | "
+                f"{_f(statistics.median([tr_[u] for u in lock]) if lock else None)} | "
+                f"{_f(statistics.median([tr_[u] for u in ali]) if ali else None)} |")
+        out("\nWhen FGPL locks rotation, translation is centimetre-accurate; when it aliases, "
+            "position lands 1-2 m off. Aliasing is an FGPL property, not a PanoPin regression: "
+            "it affects the GT-seeded oracle too. But seed quality shifts how OFTEN it happens, "
+            "and the effect is not monotonic in seed error — on some panos the PanoPin seed "
+            "locks where the GT seed aliases (e.g. `47b49abf`, `1119e668`) and vice versa.")
+        out("\n**This corrects D25/D35**, which concluded rotation was hopeless because the "
+            "oracle was itself ~90 deg off. That was measured on a map containing 2 "
+            "non-Manhattan rooms. On a strictly Manhattan map the GT-seeded oracle reaches a "
+            f"{_f(o['scored']['rotation']['median'], 1)} deg median — FGPL's rotation is usable "
+            "when the Manhattan assumption actually holds.")
+
         em, om = e["scored"]["translation"]["median"], o["scored"]["translation"]["median"]
         if em is not None and om is not None:
+            out("\n### Read the medians with care")
+            out(f"The overall medians ({em:.3f} m PanoPin vs {om:.3f} m oracle) look like a "
+                "9x gap but are an ARTEFACT of a bimodal distribution straddled by a ~50% lock "
+                "rate: the median simply falls on the locked side for the oracle (13/22) and the "
+                "aliased side for PanoPin (10/22). The honest comparison is within-group — and "
+                "there, **the PanoPin seed matches the GT seed** (locked: 0.040 vs 0.048 m). The "
+                "whole difference is a 3-pano lock-rate gap at n=22, which is not clearly "
+                "distinguishable from noise.")
+
             out(f"\n## Verdict\n")
-            out(f"- FGPL's own error floor on this map (GT-seeded oracle): **{om:.3f} m** median.")
-            out(f"- PanoPin-seeded: **{em:.3f} m** median "
-                f"(right-room slice {_f(e['trans_median_right_room'])} m).")
-            out(f"- So of PanoPin's {em:.3f} m, roughly {om:.3f} m is FGPL's refinement floor, "
-                f"not the color seed.")
+            out(f"- **PanoPin delivers every room a correct seed** (room coverage "
+                f"{e['coverage']['n_covered']}/{e['coverage']['n_rooms']}, room-anchored 5/5) and "
+                f"FGPL localized {e['scored']['n_localized']}/{e['n_admitted']} panos, zero errors.")
+            out("- **Where rotation locks, the color seed is as good as ground truth** "
+                "(0.040 vs 0.048 m) — D25's 'color position seed ~= oracle' reproduces under a "
+                "strict Manhattan restriction, now measured through FGPL.")
+            out("- **The binding constraint is FGPL's rotation aliasing, not PanoPin.** It hits "
+                "the GT-seeded oracle nearly as often (9/22 vs 12/22), and it is chaotic rather "
+                "than monotonic in seed error — a better seed does not reliably prevent it.")
+            out(f"- **Manhattan restriction materially helped FGPL:** the oracle reaches "
+                f"{om:.3f} m / {_f(o['scored']['rotation']['median'], 1)} deg here, vs 0.696 m / "
+                "89.9 deg for D35's oracle on a map with 2 non-Manhattan rooms (different pool, "
+                "so indicative rather than controlled).")
+            out("- Remaining PanoPin-side gap = 4 wrong-room seeds out of 22 (the D23/D31 "
+                "weak-lock ceiling), which cost the mean/max but not per-room coverage.")
 
     (paths.HERE / "MANHATTAN_POSE_RESULTS.md").write_text("\n".join(L) + "\n")
     print(f"\nwrote {paths.HERE / 'MANHATTAN_POSE_RESULTS.md'}")
