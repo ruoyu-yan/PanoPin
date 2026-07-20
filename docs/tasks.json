@@ -43,7 +43,7 @@
     },
     {
       "id": "T4b",
-      "title": "PanoPin -> FGPL alignment export (gated per-pano seeds) \u2014 D34",
+      "title": "PanoPin -> FGPL alignment export (gated per-pano seeds) — D34",
       "status": "done",
       "passes": true,
       "verify": "conda run -n panopin python -m pytest tests/test_fgpl_export.py tests/test_fgpl_export_smoke.py -q  ->  14 passed",
@@ -59,7 +59,7 @@
     },
     {
       "id": "T6",
-      "title": "Validate PanoPin->FGPL end-to-end (validation round-trip) \u2014 D35",
+      "title": "Validate PanoPin->FGPL end-to-end (validation round-trip) — D35",
       "status": "done",
       "passes": true,
       "verify": "conda run -n panopin python -m pytest tests/test_roundtrip.py -q -> 3 passed; AND conda run -n panopin python -m experiments.fgpl_seed.roundtrip -> 10/10 localized, per-room coverage 6/6 (experiments/fgpl_seed/ROUNDTRIP_RESULTS.md)",
@@ -67,11 +67,11 @@
     },
     {
       "id": "T7",
-      "title": "Option B \u2014 production/Electron pipeline wiring (real Scan2BIM consumes PanoPin seeds)",
+      "title": "Scan2BIM localization unit — FGPL + upright prior + PanoPin as one unit in Point_360",
       "status": "todo",
       "passes": false,
-      "verify": "the real scan2measure-webframework pipeline (Electron) runs PanoPin seed_rooms + fgpl_export in place of the SAM3 jigsaw stage, with real non-identity metadata, producing a demo6_alignment.json that FGPL consumes end-to-end on a real project",
-      "notes": "THE NEXT STEP after D35. Cross-repo (scan2measure-webframework): replace the align_polygons_demo6 (SAM3 jigsaw) stage; use real density-image metadata (R != I, which exercises fgpl_export's frame round-trip guard for the first time in production). Optional precursors: larger-n / cross-area / controlled-Voronoi accuracy re-run of the round-trip (T6)."
+      "verify": "Point_360 gains a Stage 0 (run_localization.py + localization/) that produces the {pano:{R,t}} pose contract from PanoPin-seeded, prior-enabled FGPL; FGPL and PanoPin are pinned submodules of Point_360; Gate 1 (prior present AND enabled) and Gate 2 (reprojection) both fail closed; the unit reproduces D36 (5/5 rooms, ~0.084 m) on the Manhattan pool; TMB smoke test stays green; Stages 2-4 run end-to-end on conferenceRoom_1 with estimated poses.",
+      "notes": "RETARGETED 2026-07-20 (user correction). The previous note named the WRONG REPO: PanoPin is developed for Scan2BIM (/home/ruoyu/Point_360), NOT for scan2measure's Electron app, and there is no SAM3-jigsaw stage to replace there. Design: docs/specs/2026-07-20-scan2bim-localization-unit-design.md. KEY FACTS (verified 2026-07-20): pose estimation IS part of Scan2BIM (thesis Ch.5, ruoyu_thesis.txt:1388-1500, 'an independent reimplementation of the FGPL algorithm') but NO pose code sits in the Point_360 tree on any branch - it lives in scan2measure, declared as the submodule DavidThesis/scan2measure-webframework, which is UNINITIALIZED (empty dir). That submodule points at upstream ugurfeyzullah/... while the working clone's origin is the user's own fork ruoyu-yan/...; the pinned commit acdc812 does not exist in that fork. So the work is: merge feat/upright-rotation-prior into the fork's main, re-point + pin + init the submodule, add PanoPin as a second pinned submodule, then build Stage 0. Envs are irreducible (point360 py3.12 / panopin-gpu py3.8 / scan_env) so conda-run shell-out stays, per run_scan2measure_3d_lines.py:186. CONCURRENCY: another session works in /home/ruoyu/Point_360 on feat/segbackend-instances with a dirty tree - use a git worktree off s3dis-eval (branch alone is NOT isolation; one worktree holds one branch). Eval swap (--pose-source gt|panopin) is a seam only - the paper keeps feeding GT poses."
     },
     {
       "id": "T8",
@@ -79,7 +79,7 @@
       "status": "done",
       "passes": true,
       "verify": "conda run -n panopin python -m experiments.fgpl_seed.manhattan_presentation  ->  regenerates MANHATTAN_PANOPIN_VS_FGPL.md from work/results/*.json (FGPL alone 1/5 rooms / 82% wrong-room / 13.27m vs +prior+PanoPin 5/5 / 18% / 0.084m)",
-      "notes": "Manhattan-only pool (5 rooms / 22 panos, largeval INTERSECT roadmap.md \u00a75). Neither prior pool was strictly Manhattan. HEADLINE: FGPL cannot do multi-room alone (82% wrong-room); PanoPin is what makes it work. Control: the upright prior WITHOUT PanoPin = 13.32m (no help) -- prior fixes orientation, PanoPin fixes placement. Shipped the upright prior to scan2measure (feat/upright-rotation-prior, opt-in): 0.960 -> 0.084m, locked 10/22 -> 15/22, ~10x faster XDF; does NOT solve the flip (7/22 remain, pure yaw). REFUTED: per-room architecture (the seed also pins position). Artifacts: MANHATTAN_{PANOPIN_VS_FGPL,RESULTS,SUMMARY,POSE_TABLE_*}.md + PERROOM_RESULTS.md."
+      "notes": "Manhattan-only pool (5 rooms / 22 panos, largeval INTERSECT roadmap.md §5). Neither prior pool was strictly Manhattan. HEADLINE: FGPL cannot do multi-room alone (82% wrong-room); PanoPin is what makes it work. Control: the upright prior WITHOUT PanoPin = 13.32m (no help) -- prior fixes orientation, PanoPin fixes placement. Shipped the upright prior to scan2measure (feat/upright-rotation-prior, opt-in): 0.960 -> 0.084m, locked 10/22 -> 15/22, ~10x faster XDF; does NOT solve the flip (7/22 remain, pure yaw). REFUTED: per-room architecture (the seed also pins position). Artifacts: MANHATTAN_{PANOPIN_VS_FGPL,RESULTS,SUMMARY,POSE_TABLE_*}.md + PERROOM_RESULTS.md."
     },
     {
       "id": "T9",
