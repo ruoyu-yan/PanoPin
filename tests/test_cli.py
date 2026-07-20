@@ -42,3 +42,53 @@ def test_cli_module_is_runnable():
                        cwd=str(REPO / "src"), capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert "seed" in r.stdout, r.stdout
+
+
+def test_main_routes_args_and_prints_admitted_names_one_per_line(tmp_path, monkeypatch, capsys):
+    """main()'s argparse wiring + stdout contract: downstream parses stdout as the admitted
+    panorama names, one per line, and nothing else. --panos and --clouds must reach
+    seed_from_clouds unswapped, --tau must arrive as a float, and the exit code must be 0.
+
+    seed_from_clouds itself runs GPU localization, so it is stubbed here; only main()'s wiring
+    is under test.
+    """
+    from panopin import cli
+
+    # Distinguishable contents so a --panos/--clouds swap is detectable: disjoint key sets and
+    # disjoint value shapes (str paths vs a dict), not just different values at the same keys.
+    panos_obj = {"panoA": "images/panoA.jpg", "panoB": "images/panoB.jpg"}
+    clouds_obj = {"roomX": "clouds/roomX.ply", "roomY": "clouds/roomY.ply", "roomZ": "clouds/roomZ.ply"}
+    panos_path = _write(tmp_path / "panos.json", panos_obj)
+    clouds_path = _write(tmp_path / "clouds.json", clouds_obj)
+    metadata_path = tmp_path / "metadata.json"  # never opened by the stub; existence not required
+    out_path = tmp_path / "demo6_alignment.json"
+
+    calls = []
+
+    def fake_seed_from_clouds(panos, candidate_clouds, metadata, out, tau=0.10):
+        calls.append(dict(panos=panos, candidate_clouds=candidate_clouds,
+                           metadata=metadata, out=out, tau=tau))
+        return ["panoB", "panoA"]
+
+    monkeypatch.setattr(cli, "seed_from_clouds", fake_seed_from_clouds)
+
+    rc = cli.main(["seed",
+                   "--panos", str(panos_path),
+                   "--clouds", str(clouds_path),
+                   "--metadata", str(metadata_path),
+                   "--out", str(out_path),
+                   "--tau", "0.25"])
+
+    assert rc == 0, rc
+
+    captured = capsys.readouterr()
+    assert captured.out == "panoB\npanoA\n", repr(captured.out)
+    assert captured.err == "", repr(captured.err)
+
+    assert len(calls) == 1, calls
+    call = calls[0]
+    assert call["panos"] == panos_obj, call["panos"]
+    assert call["candidate_clouds"] == clouds_obj, call["candidate_clouds"]
+    assert call["out"] == out_path, call["out"]
+    assert call["tau"] == 0.25, call["tau"]
+    assert isinstance(call["tau"], float), type(call["tau"])
