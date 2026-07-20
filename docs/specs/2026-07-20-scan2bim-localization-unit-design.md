@@ -48,9 +48,18 @@ Four facts established by inspection on 2026-07-20:
 3. **The submodule points at the wrong remote.** `.gitmodules` declares
    `github.com/ugurfeyzullah/scan2measure-webframework` (upstream). The working clone at
    `/home/ruoyu/scan2measure-webframework` has origin `github.com/ruoyu-yan/scan2measure-webframework`
-   — **the user already has a fork.** The pinned commit `acdc812` does not exist in that fork
-   (`git cat-file`: could not get object info). So `git submodule update --init` today would fetch
-   upstream code containing neither the upright prior nor the PanoPin narrowing work.
+   — **the user already has a fork.**
+
+   **Corrected 2026-07-20 during Task 2.** An earlier draft of this spec claimed the pinned commit
+   `acdc812` "does not exist in that fork". That was wrong, and the evidence was misread: `git
+   cat-file` failed in the *local sibling clone*, which had simply never fetched it. Fetching from
+   the fork's remote resolves it fine. What is true, and is the actual justification for re-pinning:
+   **`acdc812` exists but does not contain the upright prior** (`git show
+   acdc812:src/pose_estimation/pose_search.py | grep -c "up_can = principal_3d"` → 0).
+
+   This makes the case for Gate 1 *stronger*, not weaker. `git submodule update --init` would have
+   succeeded silently and produced a working FGPL without the prior — no error, no missing
+   directory, just poses ~11x worse. A missing commit would at least have failed loudly.
 
 4. **Env boundaries are irreducible.** `point360` is py3.12 / torch 2.7; `panopin-gpu` is py3.8 /
    torch 2.0.1+cu118 (pinned by CPO); `scan_env` is torch 1.12+cu116 / open3d 0.19. No shared
