@@ -697,3 +697,41 @@ test `tests/test_roundtrip.py` (3/3); results `experiments/fgpl_seed/ROUNDTRIP_R
 - Caveats: Area_3 only, n=22, Manhattan rooms only. The nearest-centroid room metric misjudges
   boundary panos (`5c2959c3` is 2.9 cm from GT yet scored wrong-room), so 18% wrong-room is slightly
   pessimistic.
+
+## D37 — CORRECTION: D1's "CPO is inherently non-reproducible" was inaccurate; the fix already existed, it just never reached the shipped path (2026-07-20)
+**Context.** Stage 0 acceptance (T7, `localization/ACCEPTANCE.md` in the Point_360 repo) failed
+criterion 1 on its first run: translation median 0.639 m vs the D36 target of 0.084 m (7.6x worse),
+and Gate 2 at 261.6 px (threshold 100, FAIL). Bisected, not guessed: comparing a cached seed against
+a fresh reseed of the identical inputs showed room labels differing on 5/22 panos and seed positions
+drifting >1 m on 7/22 (max 27.46 m) — the drifted seeds mapped 1:1 onto the bad final poses; the
+9/22 panos with identical seeds gave the good poses.
+- **Root cause, isolated to two sources:** (a) `data_utils.read_txt_pcd` draws an `np.random`
+  permutation whenever `sample_rate>1`; the deployed config uses `sample_rate=30`, so every unpinned
+  run sampled a different point subset per cloud; (b) multi-threaded float reduction order (named as
+  the larger source in `determinism.py`'s own docstring).
+- **The fix already existed.** `src/panopin/determinism.py::pin()` sets
+  `torch.set_num_threads(1)` and seeds `np.random`/`torch`, fixing both sources. **Every**
+  `experiments/fgpl_seed/*` script called it (e.g. `largeval_localize.py:15`) — but **nothing under
+  `src/panopin/` did**. The shipped path — `cli.py` → `seed.localize_and_score` →
+  `cpo_adapter.localize_pair` — ran completely unpinned, while the experiment/validation path that
+  produced every prior headline (D30–D36) was pinned all along. The library and the paper trail
+  behind it were never actually running the same code path.
+- **D1 (2026-07-08) is CORRECTED, not superseded.** D1 recorded CPO as inherently non-reproducible on
+  CPU and deferred the problem as an accepted cost. That factual characterization was inaccurate —
+  the project had already solved determinism; the solution simply never reached the deployable unit.
+  D1's *preference* (deterministic/simplicity-first) stands unchanged; only its claim about CPO does not.
+- **Fix:** `pin()` placed at the top of `seed.localize_and_score` — the chokepoint both entry points
+  (`cli.seed_from_clouds` and `seed.seed_rooms`) pass through — PanoPin commit `be674b9`.
+  `tests/test_determinism.py::test_localize_and_score_is_reproducible_across_runs` exercises the real
+  path, not a toy: two back-to-back calls on identical synthetic inputs disagreed before the fix,
+  agree after. Full suite: 54 passed, 1 xfailed, no regressions.
+- **Measured consequence** (re-running Stage 0 acceptance with the fix): translation median
+  **0.639 m → 0.089 m** (D36 target 0.084 m); Gate 2 **FAIL 261.6 px → PASS 59.0 px** (threshold
+  100 px). Rotation and room-assignment also moved favorably, but rest on single medians at n=22 with
+  no dispersion — the honest claim is that this reproduces D36, not that it beats it
+  (`ACCEPTANCE.md` §1).
+- **Cost:** `pin()` sets `torch.set_num_threads(1)`, so seeding is now single-threaded — determinism
+  is bought with wall-clock, not free.
+- **Cross-reference:** corrects **D1**; the reproduced number is **D36**'s (0.084 m, strictly-Manhattan
+  5-room/22-pano pool). Full root-cause narrative in `localization/ACCEPTANCE.md` §2 (Point_360 repo,
+  read-only from PanoPin's side).

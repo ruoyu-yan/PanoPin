@@ -2,6 +2,56 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-20 — Scan2BIM localization unit: Stage 0 + PanoPin's first CLI built, acceptance 5/5 PASS after fixing a determinism bug mischaracterized since D1; branch feat/localization-unit READY TO MERGE, NOT YET MERGED — do the merge first next session)
+- Executed the 9-task SDD plan `docs/plans/2026-07-20-scan2bim-localization-unit.md` (spec
+  `docs/specs/2026-07-20-scan2bim-localization-unit-design.md`), subagent-driven, in a **worktree**
+  `/home/ruoyu/Point_360-localization` (branch `feat/localization-unit`, off `s3dis-eval@548728b`) to
+  stay clear of a sibling session working `/home/ruoyu/Point_360` on `feat/segbackend-instances`.
+  Ledger: `.superpowers/sdd/progress.md`.
+- **Built:** Point_360 gained **Stage 0** — `run_localization.py` + `localization/`
+  (`preflight.py` = Gate 1, `gate_reprojection.py` = Gate 2, `fgpl_pose_adapter.py`, `axis_fix =
+  identity`) — that seeds prior-enabled FGPL with PanoPin and emits the `{pano:{R,t}}` pose contract.
+  PanoPin gained **its first CLI**, `src/panopin/cli.py` (`seed_from_clouds`), the entry point
+  Stage 0 calls. FGPL re-pinned to the `ruoyu-yan` fork's upright-prior branch; PanoPin added as a
+  second pinned submodule at `external/PanoPin`.
+- **Acceptance (`localization/ACCEPTANCE.md`, Point_360 repo; Area_3 Manhattan pool, 5 rooms / 22
+  panos, FGPL inputs rebuilt fresh from the raw S3DIS `.txt` clouds): ALL 5 CRITERIA PASS.**
+  #1 reproduce D36 — trans median **0.089 m** vs 0.084 m target (reproduces, does not beat: single
+  medians at n=22, no dispersion; mean is 3.49 m, bimodal, dominated by 3 wrong-room panos). #2 Gate 1
+  fails closed. #3 Gate 2 reprojection **59.0 px** (threshold 100). #4 TMB smoke test exact baseline
+  match. #5 Stages 2-4 on `conferenceRoom_1` with estimated poses — schema intact (wall 13=13, beam
+  24=24, window 8=8 exact; floor/ceiling 15→14; door 16→8, plausibly the one wrong-room pano).
+- **The determinism finding — the real result of this session.** The FIRST acceptance run FAILED
+  criterion 1 at **0.639 m** (7.6x worse than target) and Gate 2 (261.6 px, FAIL). Root-caused, not
+  guessed: `data_utils.read_txt_pcd` draws an `np.random` permutation whenever `sample_rate>1`
+  (deployed config uses 30); multi-threaded float reduction order is a second, larger source.
+  `panopin.determinism.pin()` already fixed both and **every** `experiments/fgpl_seed/*` script
+  called it — but **nothing under `src/panopin/` did**, so the shipped path (`cli.py` →
+  `seed.localize_and_score` → `cpo_adapter`) ran unpinned while the experiment path that produced
+  every prior D30-D36 headline was pinned all along. Fixed in PanoPin `be674b9` (`pin()` at the top
+  of `seed.localize_and_score`). Re-run: 0.639 m → 0.089 m, Gate 2 FAIL → PASS. **D1's
+  characterization of CPO as inherently non-reproducible was inaccurate** — recorded as **D37**.
+  Cost: `pin()` sets `torch.set_num_threads(1)`, so seeding is now single-threaded.
+- **Final whole-branch review (opus):** first pass came back NO — 2 Criticals a per-task review
+  structurally couldn't see (PanoPin submodule pinned to a pre-fix commit with the fix unpushed; the
+  FGPL re-pin silently reverted a native-setup patch, `acdc812` was reachable only via `.gitmodules`
+  and one `git gc` from being lost). Both closed: FGPL re-pinned to `cff1cab` (`528061b` + the
+  reverted patch cherry-picked back in, pushed as `feat/upright-prior-p360`); PanoPin pushed +
+  re-pinned to `be674b9`; both pins tagged in their own repos (`p360-pin-2026-07-20`,
+  `scan2bim-pin-2026-07-20`, both pushed) so branch deletion can't orphan either. Also disclosed:
+  `ACCEPTANCE.md` §3's BIM table came from a hand-remapped pose file, not the shipped CLI directly —
+  now stated plainly in §3. **Final verdict: READY TO MERGE = YES.**
+- **State:** `/home/ruoyu/Point_360-localization` branch `feat/localization-unit` = 13 commits, **NOT
+  merged into `s3dis-eval`, NOT pushed**; `s3dis-eval` untouched @ `ccd6510`. PanoPin branch
+  `docs/scan2bim-localization-spec` @ `be674b9`, pushed to origin; PanoPin `main` untouched.
+- **STOPPED** here; user is ending the session. **NEXT SESSION MUST DO THE MERGE FIRST, before any
+  new work:** `cd /home/ruoyu/Point_360 && git merge feat/localization-unit && git push origin
+  s3dis-eval` — verified fast-forwardable (`s3dis-eval@ccd6510` is a direct ancestor of
+  `feat/localization-unit`'s tip `d93d704`; expected clean, see `docs/HANDOVER.md` for why). After
+  that: T9 (room-scoped line filtering) / T10 (rotation-margin confidence) remain open, and
+  cross-area generalization + the `R != I` density-image path are still untested (`ACCEPTANCE.md`
+  §4).
+
 ## Current state (2026-07-16 — strictly-Manhattan demo: PanoPin proven decisive (13.3m -> 0.08m); 180-degree flip diagnosed + upright prior shipped to scan2measure; two follow-on fixes refuted; D36)
 - User asked for a co-worker demo confined to **Manhattan-world rooms** (Point_360 `roadmap.md` §5),
   with single-room `.ply` clouds so the search space is Manhattan too. Branch `feat/manhattan-demo`;

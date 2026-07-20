@@ -1,165 +1,165 @@
 # PanoPin — Handover
 
-> **This file was written 2026-07-10 and its instructions are STALE.** Its "next step" (wire v1
-> calibration into the seed) was done and **refuted** (D26). Do **not** follow it. The current
-> state lives in `docs/PROGRESS.md` (top block) + `docs/DECISIONS.md` (**D36** newest). The
-> 2026-07-10 content is kept below only as history.
+_Last written: 2026-07-20, end of the Scan2BIM-localization-unit (T7) session. This is current —
+not the stale 2026-07-10 version that used to live here._
 
-**Read order (2026-07-16):** `docs/PROGRESS.md` top block -> `docs/DECISIONS.md` **D36** (today),
-then **D30-D35** (the deployment line) -> `docs/tasks.json` (**T9**, **T10** are the open work) ->
-`experiments/fgpl_seed/MANHATTAN_PANOPIN_VS_FGPL.md` (the presentation doc).
+## DO THIS FIRST: merge `feat/localization-unit` into `s3dis-eval`
 
-## What PanoPin is
-A fast, deterministic **coarse panorama->room seed** (which room + rough position) handed to
-**FGPL** (the fine geometric localizer in `/home/ruoyu/scan2measure-webframework/`) so pose
-estimation works on large, repetitive multi-room buildings where the thesis' shape-based jigsaw
-fails. Method = **CPO render-and-compare on COLOR** (not shape).
+T7 (Scan2BIM localization unit — Stage 0: PanoPin-seeded, prior-enabled FGPL, inside Point_360) is
+**built, fully accepted (5/5 criteria), and whole-branch-reviewed READY TO MERGE = YES.** It has not
+been merged or pushed. That is the only thing left. Do it before starting any new work.
 
-## The one-line result (2026-07-16, D36)
-On a strictly-Manhattan 5-room / 22-pano Area_3 scene, same map and estimator throughout:
-**FGPL alone = 1/5 rooms, 82% wrong-room, 13.27 m median. +PanoPin = 5/5 rooms, 18%, 0.084 m.**
-The rooms are near-identical in shape, so FGPL's geometry cannot tell them apart and colour can.
-That is the whole argument.
+The work lives in a **separate git worktree**, `/home/ruoyu/Point_360-localization`
+(branch `feat/localization-unit`), left in place on purpose so this merge can happen from the main
+checkout without juggling branches in one working tree:
 
-## Facts a new session MUST know
-- **Envs (never mix):** FGPL estimator + CPO -> `panopin-gpu`; FGPL build tools (baker/cluster/
-  features) -> `scan_env`; PanoPin tests/harness -> `panopin`.
-- **The hand-off is per-PANO** (D34): FGPL localizes each pano from its own seed, and consumes only
-  `camera_position` from `demo6_alignment.json` (`room_label`/`rotation_deg` are ignored -- room_label
-  appears only in a `print`). Seeding one pano per room poses ONE pano, not the room's others.
-- **The seeds ARE the Voronoi partition.** More seeds -> smaller cells -> less 3D geometry per pano
-  -> rotation aliasing. But the seed also **pins position**: removing the partition entirely is
-  WORSE (`PERROOM_RESULTS.md` -- `fafa0629` locked rotation at 0.7 deg and landed 8.8 m down a
-  hallway). Both refuted extremes are documented in D36; the untested middle is **T9**.
-- **Absolute thresholds do not transfer.** `tau=0.10` (D34) admits 21/22 including 3 wrong-room panos
-  on the Manhattan pool. Prefer threshold-free (room-anchored) or within-pano relative signals (the
-  rotation margin, T10).
-- **Read bimodal medians with care.** Poses either lock (~1 deg) or flip (~90-180 deg), nothing
-  between; a median only reports which side most panos are on, NOT the error size.
-- **Rotation flips are FGPL's, not PanoPin's** -- they happen with a GT seed too.
-- `work/` is gitignored (514 MB of caches); committed numbers live in the `*_RESULTS.md` files.
-
----
-
-# HISTORICAL — the 2026-07-10 handover (superseded; read for context only)
-
-**Read order:** this file → `docs/PROGRESS.md` (top "Current state" block) → `docs/DECISIONS.md` **D25**
-(today) + **D14–D24** (v1) → `experiments/fgpl_seed/RESULTS.md` (today's numbers) →
-`.superpowers/sdd/progress.md` (today's task-by-task ledger).
-
-## What PanoPin is
-A fast, deterministic **coarse panorama→room seed** (which room + rough position) handed to **FGPL** (the
-fine geometric localizer in `/home/ruoyu/scan2measure-webframework/`) so pose estimation works on large,
-repetitive multi-room buildings where the thesis' shape-based jigsaw fails. Method = **CPO render-and-compare
-on COLOR** (not shape). Success metric = pano→room accuracy on S3DIS Area_3 (random baseline 5.9%).
-
-## Three workstreams and their state
-1. **v1 (DONE, 2026-07-09)** — fair minmax calibration + confidence gate over CPO losses. Whole-area
-   recall@1 33%→**58%** (n=12). On branch `feat/coarse-room-cpo`. Two threads still OPEN (see bottom).
-2. **FGPL seed ablation (DONE TODAY, 2026-07-10)** — the main event; branch `feat/fgpl-seed-ablation`.
-   Details below. **This is the active thread with the clearest next step.**
-3. (background) ceiling-push robust loss — branch `feat/robust-loss-ceiling`, still empty.
-
----
-
-## TODAY — PanoPin → FGPL seed ablation (branch `feat/fgpl-seed-ablation`, PUSHED)
-
-**Question answered:** can PanoPin's color output replace FGPL's slow SAM3+IoU jigsaw and improve FGPL's
-pose accuracy on same-shape multi-room S3DIS? **YES for the position seed.**
-
-**Result (n=12, 6-room subset office_1/4/5/6/7 + hallway_3):**
-- **Where CPO picks the right room (8/12), the color POSITION seed == ground truth:** P1 median **0.762 m**
-  vs oracle **0.725 m** — FGPL localizes identically. The whole P1↔oracle gap on the full set (0.946 vs
-  0.789) is the **4 wrong-room misses** (all → hallway_3 loss-sink, ~22 m each).
-- **⇒ the color position seed WORKS; the bottleneck is ROOM RECALL** (67% here, raw min-loss).
-- **P2** (translation-grid narrowing) = **no effect** (Voronoi already constrains). **P3** (CPO rotation
-  prior) = **hurts** (CPO rotation is convention-broken). Both should be dropped.
-- Whole-branch review = **SOUND** (no GT leak; scoring/frame correct).
-
-### THE NEXT STEP (do this first tomorrow — ~1 hr, harness already exists)
-**Wire v1 calibration into the room assignment in `experiments/fgpl_seed/cpo_seeds.py`.** It currently
-assigns `room = min-loss room` (raw → 67% recall). v1's calibration lifts recall 33→58% and flags the
-loss-sink misses — i.e. it directly targets the 4 failures that are the entire gap to the oracle.
-Concretely:
-1. In `cpo_seeds.py`, cache `(t, R, loss)` for **all 6 rooms** per pano (today it keeps only the min-loss
-   winner's `t,R` + a `per_room` loss dict).
-2. After the loop, build `loss_matrix = {pano: per_room}` and call `calibrate.assign(loss_matrix)`
-   (`src/panopin/calibrate.py`) → calibrated room per pano.
-3. Use the **calibrated** room's cached `(t,R)` as the P1 seed (instead of raw min-loss).
-4. Re-run `run_all` (already computes the right-room split). Expect wrong-room rate to drop from 33%.
-5. (Optional) apply the **confidence gate** to ABSTAIN on flagged panos — hand FGPL nothing rather than a
-   wrong seed (the deployed pipeline can then skip or fall back for those).
-
-### Reproduce (all commands from `/home/ruoyu/PanoPin`)
+```bash
+cd /home/ruoyu/Point_360          # main checkout, currently on s3dis-eval @ ccd6510
+git merge feat/localization-unit
+git push origin s3dis-eval
 ```
-conda run -n panopin     python -m experiments.fgpl_seed.gate_oracle    # Phase-0 oracle gate (~10 min)
-conda run -n panopin-gpu python -m experiments.fgpl_seed.cpo_seeds       # CPO seeds -> work/seeds/cpo_cache.json (~30 min)
-conda run -n panopin     python -m experiments.fgpl_seed.run_all         # 5-arm ablation -> work/results/ablation.json (~40 min)
-```
-Line map + features are already built under `work/` (reused unless `--rebuild`). `work/` is gitignored;
-committed numbers are in `RESULTS.md`.
 
-### Key facts the next session MUST know (FGPL side)
-- **Envs (never mix):** FGPL **estimator + CPO** → `panopin-gpu` (`paths.ESTIMATOR_ENV`, torch cu118,
-  Ada-native). FGPL **build tools** (baker/cluster/features) → `scan_env`. PanoPin tests/harness → `panopin`.
-  scan_env's cu116 predates Ada (RTX 4060) → CPU fallback; that's why we moved the estimator to panopin-gpu.
-- **Estimator cost:** ~8 min/arm for 12 panos, because the **multi-pano Voronoi shrinks each pano's cell** →
-  fewer translation candidates (~8–94 s/pano). A SINGLE-pano run searches the whole map (~325 s) and can
-  land in the wrong same-shape room — so never gate/measure on a single pano. The XDF search is **CPU-bound
-  numpy** (GPU only ~1.2×).
-- **Raw S3DIS frame:** we run FGPL entirely in the raw S3DIS frame via an **identity `rotation_matrix`** in
-  `metadata.json` → `aligned_meters_to_raw_3d` is a pass-through ([x,y]→[x,y,0]). No floorplan/SAM3/density
-  front-end needed. **Gotcha:** the estimator does `density_img.shape` unconditionally
-  (`multiroom_pose_estimation.py:259`) on a cv2-loaded density image — we emit a blank 256×256 `density.png`
-  (viz-only; `seed_and_config._ensure_density_png`). Without it the estimator crashes before pose.
-- **FGPL handoff is POSITIONAL:** the estimator consumes only `camera_position` from the seed
-  (`demo6_alignment.json`); `room_label`/`rotation_deg` are ignored; region binding is a Voronoi over seed
-  positions. So the seed's job is region selection — which is why room recall is the bottleneck.
-- **FGPL rotation convention** (D25): FGPL outputs `Rp = C @ R_wc`, `C = [[0,0,1],[-1,0,0],[0,-1,0]]`
-  (equirect signed-perm, same as Point_360 solved). `Rp.T @ C` = camera→world; 0.4–0.5° on precise panos.
-  FGPL rotation is ALSO ~90° Manhattan-aliased even with a good seed. **CPO's rotation is unusable** (~120°
-  off GT in both conventions) — that's why P3 fails; don't seed FGPL rotation from CPO.
-- **The FGPL narrowing edit** (P2/P3, flag-gated default-off) lives on scan2measure branch
-  `feat/panopin-seed-narrowing` (pushed) + as `experiments/fgpl_seed/patches/fgpl_narrowing.patch`.
-  scan2measure is back on `main`; re-apply via `git checkout feat/panopin-seed-narrowing` or the patch to
-  re-run P2/P3.
-- **`experiments/fgpl_seed/` map:** `paths.py` (env/path consts) · `subset.py` (6 rooms→12 panos) ·
-  `build_ply/build_linemap/build_features` (FGPL artifacts) · `seed_and_config.py` (identity metadata +
-  per-arm seed/config) · `cpo_seeds.py` (CPO room assign + cache) · `run_arm.py` (estimator wrapper) ·
-  `score.py` (vs GT via `eval/metrics`) · `gate_oracle.py` (Phase-0 gate) · `run_all.py` (5-arm ablation).
+**Expect a clean fast-forward, not a real merge.** `s3dis-eval` has not moved since it was last
+pushed (`ccd6510`), and `feat/localization-unit`'s tip already contains `ccd6510` as an ancestor —
+verified directly: `git merge-base --is-ancestor ccd6510 <feat/localization-unit tip>` → true. The
+reason it contains it: partway through T7, a **sibling session** finished its own work
+(`feat/segbackend-instances`, 4A.2a per-instance segmentation) and merged it into `s3dis-eval`
+(`ccd6510`); this session then merged `s3dis-eval` into `feat/localization-unit` (merge commit
+`90f7b3d`) to pick that up — zero conflicts, zero file overlap (`comm -12` on the two branches'
+changed-file lists was empty; two sessions worked the same repo for hours via worktree isolation
+without interfering). So `git merge feat/localization-unit` from `s3dis-eval` today has nothing left
+to reconcile — it should just move the ref forward.
 
----
+If it is *not* a fast-forward, or `git status` shows anything unexpected, **stop and diagnose before
+forcing anything** — that would mean an assumption above is wrong. One known, harmless bit of noise:
+`/home/ruoyu/Point_360/data/localization/` (Stage-0 acceptance-run outputs) is **untracked and not
+gitignored** in the worktree — it will not affect the merge (untracked files are per-worktree), but
+decide whether to `.gitignore` it or commit a trimmed version before it accumulates further.
 
-## v1 — two threads still OPEN (branch `feat/coarse-room-cpo`, PUSHED)
-1. **Wire v1 into `solve.py`** (manifest → per-pano×room loss matrix → `calibrate.assign` → predictions with
-   confidence/flag → `eval/score.py`); validate beyond n=12. (Overlaps with the FGPL next-step above —
-   both need the calibrated assignment.)
-2. **Ceiling-push (branch `feat/robust-loss-ceiling`, empty):** robust/masked loss (trimmed-mean / median /
-   low-percentile per-point residuals) to rescue minority-window panos (test office_7; won't help
-   window-dominated office_8). Needs a GPU re-run capturing per-point residuals; compute the robust stat in
-   our adapter at the returned pose — do NOT edit `third_party/cpo/`.
-- v1 code: `src/panopin/calibrate.py` (+ `tests/test_calibrate.py`), `smoke/{score_v1,analyze_calibration}.py`.
-- Reusable: `runs/calib_matrix.json` (12×23 loss matrix — offline formula analysis, no GPU).
+After the merge lands and is confirmed on GitHub: `feat/localization-unit` can be deleted (same
+convention `feat/segbackend-instances` followed after its merge). Do not delete it before confirming
+the push. The worktree `/home/ruoyu/Point_360-localization` itself can then be removed with
+`git worktree remove` — not required immediately, no rush.
 
-## Repo / GitHub state (as of end 2026-07-10 — now PUSHED)
-- **PanoPin** (github.com/ruoyu-yan/PanoPin): `main` = skeleton; `feat/coarse-room-cpo` = v1 (pushed);
-  **`feat/fgpl-seed-ablation` = today, HEAD `37cdabc`, pushed**; `feat/robust-loss-ceiling` = empty.
-- **scan2measure-webframework** (github.com/ruoyu-yan/scan2measure-webframework): on `main`;
-  `feat/panopin-seed-narrowing` (`56e6519`, pushed) holds the flag-gated FGPL edit. Its `main` has the
-  user's own unrelated pending work (README, submodules, thesis-defense docs) — leave those alone.
+## What T7 actually built, in one paragraph
 
-## Standing gotchas / rules
-- **Fairness (D5):** `src/panopin/*` reads only the manifest — no GT. In the FGPL experiment, GT is used
-  ONLY for the oracle/wrong-room reference arms + scoring, all under `experiments/` (never in `src/panopin`).
-- **D9:** compose CPO primitives; do NOT edit `third_party/cpo/`.
-- **`panopin` package** is not pip-installed — scripts add `src/` to `sys.path` (see `cpo_seeds.py` header /
-  the smoke scripts). A `-m experiments.fgpl_seed.X` run from repo root also needs `src/` on the path for
-  `import panopin`.
-- CPO not bit-reproducible on CPU (~±0.02 loss); `panopin.determinism.pin()` sets single-thread + seed.
-- Out-of-frame panos (D17): 9/85 have GT camera outside their room cloud → unlocalizable; the FGPL subset
-  uses in-frame panos only.
+Point_360 gained a **Stage 0**: `run_localization.py` + `localization/` (`preflight.py` = Gate 1 —
+fails closed unless the FGPL submodule is initialized, the upright prior is present *and enabled*,
+and PanoPin's determinism fix is present; `gate_reprojection.py` = Gate 2 — a reprojection-error
+blunder detector, PASS/FAIL, not an accuracy metric; `fgpl_pose_adapter.py` — pure FGPL-output →
+`{pano:{R,t}}` pose-contract conversion, `axis_fix = identity`, measured as the global optimum over
+all 24 signed-permutation rotations). PanoPin gained **its first CLI**, `src/panopin/cli.py`
+(`seed_from_clouds`), the entry point Stage 0 calls. Two submodules, pinned and tagged (below).
 
-## Session ritual (start of tomorrow)
-`cat docs/PROGRESS.md docs/DECISIONS.md docs/tasks.json`; `git log --oneline -15`;
-`conda run -n panopin python -m pytest tests/ experiments/fgpl_seed/tests/ -q`; then pick a thread
-(recommended: the FGPL next-step — wire v1 calibration into `cpo_seeds`).
+## Acceptance results (measured, `localization/ACCEPTANCE.md` in the Point_360 repo — read that file
+for full numbers and caveats; do not requote figures from memory)
+
+Area_3, strictly-Manhattan 5-room pool (`office_5`, `hallway_1`, `lounge_1`, `conferenceRoom_1`,
+`WC_1`), 22 panoramas, FGPL inputs rebuilt fresh from the raw S3DIS `.txt` clouds (not cached).
+
+| # | Criterion | Result |
+|---|---|---|
+| 1 | Reproduce D36 | PASS — trans median 0.089 m vs 0.084 m target |
+| 2 | Gate 1 fails closed | PASS |
+| 3 | Gate 2 reprojection | PASS — 59.0 px (threshold 100) |
+| 4 | TMB smoke test unchanged | PASS — exact baseline match |
+| 5 | Stages 2–4 end-to-end | PASS — schema intact, no crashes |
+
+**Read this as "reproduces D36", not "beats D36."** Rotation median (0.76° vs 1.92°) and room count
+(19/22 vs ~18/22) look favorable but rest on single medians at n=22 with no dispersion — one good
+draw is not evidence of superiority, especially given the next section. Mean translation is 3.49 m
+against the 0.089 m median: bimodal, dominated by 3 wrong-room panos (`1a557181`, `f0e54fcd`,
+`da0bb9ad`), not a uniform improvement.
+
+## The determinism finding — the real headline of this session (now **D37** in `docs/DECISIONS.md`)
+
+The *first* acceptance run FAILED criterion 1 at **0.639 m** (7.6x worse than target) and Gate 2
+(**261.6 px**, threshold 100). Root cause, bisected not guessed: `data_utils.read_txt_pcd` draws an
+`np.random` permutation whenever `sample_rate>1` (the deployed config uses 30), and multi-threaded
+float reduction order adds a second, larger wobble. **`src/panopin/determinism.py::pin()` already
+fixed both, and every `experiments/fgpl_seed/*` script called it — but nothing under
+`src/panopin/` did.** The shipped path (`cli.py` → `seed.localize_and_score` → `cpo_adapter`) ran
+completely unpinned; the experiment path that produced every prior D30-D36 headline was pinned all
+along. **Fixed in PanoPin commit `be674b9`** (`pin()` at the top of `seed.localize_and_score`).
+Re-running acceptance with the fix: 0.639 m → 0.089 m, Gate 2 FAIL → PASS.
+
+This corrects **D1** (2026-07-08), which recorded CPO as inherently non-reproducible on CPU and
+deferred the problem — that characterization was inaccurate; the fix already existed and simply
+never reached the deployable unit. D1's *preference* (deterministic-first) still stands.
+**Cost:** `pin()` sets `torch.set_num_threads(1)`, so seeding is now single-threaded — determinism
+is bought with wall-clock, not free.
+
+## Whole-branch review found 2 Criticals — both closed
+
+A per-task review structurally cannot see cross-task integration bugs; the final whole-branch review
+(before the "READY TO MERGE = YES" verdict) found two:
+- **C1:** `external/PanoPin` was pinned at `9a89ba8` — *before* the determinism fix — and `be674b9`
+  had not been pushed yet. A fresh clone would have silently reproduced the 0.639 m / Gate-2-FAIL
+  numbers while `ACCEPTANCE.md` claimed 0.089 m. **Closed:** PanoPin pushed, re-pinned to `be674b9`.
+- **C2:** re-pinning the FGPL submodule (`acdc812` → `528061b`) was not a fast-forward — it silently
+  reverted a "preserve Point_360 native setup patches" whitespace fix applied via `git apply`.
+  `acdc812` was on no branch at all (reachable only via `.gitmodules`, one `git gc` from being lost).
+  **Closed:** FGPL re-pinned to `cff1cab` (= `528061b` with `acdc812`'s patch cherry-picked back in),
+  pushed as `feat/upright-prior-p360` on the fork (non-destructive to the original branch).
+- Also disclosed (Important, not Critical): `ACCEPTANCE.md` §3's BIM-reconstruction table was
+  produced from a **hand-remapped pose file**, not the shipped CLI's direct output (keys differ —
+  bare-uuid vs `camera_<uuid>_<room>` — `run_localization.py`'s own docstring says it does not rewrite
+  keys on either arm). §3 now discloses this manual step explicitly; it is not yet a one-command
+  reproduction.
+
+## Current state of both repos
+
+**Point_360** (worktree `/home/ruoyu/Point_360-localization`, remote
+`github.com/ugurfeyzullah/Point_360`):
+- `feat/localization-unit` @ `d93d704`, 13 commits ahead of `s3dis-eval`, **not merged, not pushed**
+  (no upstream tracking branch set).
+- `s3dis-eval` @ `ccd6510` (main checkout `/home/ruoyu/Point_360`), in sync with
+  `origin/s3dis-eval`, **untouched by T7** — will fast-forward on merge (see above).
+- `origin/main` @ `b191399`, untouched, unrelated to this work.
+- Two pinned submodules on `feat/localization-unit`:
+  - `DavidThesis/scan2measure-webframework` @ `cff1cab` (fork `ruoyu-yan/scan2measure-webframework`),
+    tagged `p360-pin-2026-07-20` — tag pushed to the fork.
+  - `external/PanoPin` @ `be674b9` (fork `ruoyu-yan/PanoPin`), tagged `scan2bim-pin-2026-07-20` —
+    tag pushed to the fork.
+  - Both tags exist specifically so deleting `feat/localization-unit` later cannot orphan either pin.
+
+**PanoPin** (this repo, `/home/ruoyu/PanoPin`):
+- Branch `docs/scan2bim-localization-spec` @ `be674b9`, in sync with
+  `origin/docs/scan2bim-localization-spec` (pushed). `main` untouched by this work.
+- Whether/when to merge this branch into PanoPin's own `main` is an **open decision**, separate from
+  the Point_360 merge above — not addressed this session; the Point_360 pin already points at the
+  exact commit (`be674b9`) regardless of PanoPin's own branch topology.
+
+## What is verified vs still open
+
+**Verified this session:** Gate 1 fails closed (tested against a real pre-fix commit from git
+history); Gate 2's absolute floor (`n_scored>=3`) and real controls (transposed R, t-rotated,
+yaw-sweep) actually trip; `axis_fix=identity` is the brute-forced global optimum over all 24 signed
+permutations (88° clear of runner-up); the determinism fix is exercised by a real reproducibility
+test (`tests/test_determinism.py`), not a synthetic toy; the TMB smoke test byte-matches the
+pre-existing baseline; Stages 2–4 run to completion on estimated poses with schema intact.
+
+**Still open, honestly, per `ACCEPTANCE.md` §4:**
+- Area_3 only, Manhattan-filtered, n=22. **Cross-area generalization is untested.**
+- The density-image front-end (`R != I`) is **never exercised** — `fgpl_export.raw_t_to_camera_position`'s
+  round-trip guard exists for that case and has no test coverage of it actually firing.
+- **Gate 2 is a blunder detector, not an accuracy metric** — its median-of-medians absorbs outliers
+  by design; a PASS means "no convention error", not "these poses are good." Criterion 1 measures
+  quality.
+- `docs/tasks.json` T9 (room-scoped line filtering — keep the per-pano seed's position pin while
+  giving FGPL whole-room geometry) and T10 (ship the rotation-margin confidence signal) remain open,
+  unrelated to T7 and not blocking the merge.
+- A **doc defect** was found in `docs/point360_env.md`: its literal Stage-4 command passes
+  `--no-require-cloud-support`, which fails closed on wall/door for *any* poses, GT included. Not
+  fixed this session (out of scope for T7); tracked in Point_360's own `roadmap.md` §8.
+
+## Read order for a cold-start next session
+
+1. This file (you're reading it).
+2. `docs/PROGRESS.md` top block (this session's entry).
+3. `docs/DECISIONS.md` **D37** (this session), then **D36** for the Manhattan-demo context it builds on.
+4. `docs/tasks.json` — **T7** (do the merge; then it can flip to `done`), **T9**/**T10** (next real work).
+5. `/home/ruoyu/Point_360-localization/localization/ACCEPTANCE.md` (read-only source of every number
+   quoted above).
+6. `.superpowers/sdd/progress.md` — the full task-by-task ledger, if you need more detail than the
+   summaries above.
