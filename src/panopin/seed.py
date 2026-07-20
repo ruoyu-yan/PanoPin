@@ -16,6 +16,7 @@ import numpy as np
 from panopin.cpo_config import load_cfg
 from panopin.cpo_adapter import localize_pair, residuals_at_pose
 from panopin import robust_score, coverage
+from panopin.determinism import pin
 
 RoomSeed = namedtuple("RoomSeed", "room pano t R score")
 SeedResult = namedtuple("SeedResult", "seeds confidence scores")
@@ -30,7 +31,19 @@ def _grid(resid):
 
 def localize_and_score(panos, candidate_clouds, cfg, q=robust_score.DEPLOY_Q):
     """GPU. panos {pano_id: pano_path} x candidate_clouds {room: cloud_path} ->
-    (score_matrix {pano:{room: low-pct score}}, poses {pano:{room: (t, R)}})."""
+    (score_matrix {pano:{room: low-pct score}}, poses {pano:{room: (t, R)}}).
+
+    Pins determinism.pin() first: this is the single chokepoint every shipped
+    caller passes through (panopin.cli.seed_from_clouds calls this directly;
+    seed_rooms below calls it too), and data_utils.read_txt_pcd draws an
+    np.random permutation on every call whenever cfg.sample_rate>1 (the deployed
+    sample_rate=30 always hits this). Without pinning here, two runs over the
+    same inputs can sample different point subsets and disagree on scores/poses
+    (see tests/test_determinism.py::test_localize_and_score_is_reproducible_across_runs).
+    One pin() here is sufficient for the whole loop below: residuals_at_pose
+    already reseeds np.random to a fixed value before its own read on every
+    iteration, so it re-anchors the RNG state after the first pair regardless."""
+    pin()
     grids, poses = {}, {}
     for pid, ppath in panos.items():
         grids[pid], poses[pid] = {}, {}
