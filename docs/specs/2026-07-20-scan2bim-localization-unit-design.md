@@ -90,7 +90,9 @@ the pipeline. The pose JSON's keys also serve as the pano manifest
 - **T10 (rotation-margin confidence signal).** Deferred; §6.3 captures most of its practical value
   for near-zero cost.
 - **Cross-area validation.** Everything remains Area_3. Tracked separately.
-- **Building line maps from a raw product cloud.** Supported but not exercised; see §7.1.
+- **Running through the density-image front-end (`R≠I` metadata).** The acceptance run rebuilds
+  from a raw room cloud but stays in the raw S3DIS frame with identity `metadata.json`, matching
+  D25/D36. The non-identity transform remains untested; see §7.1 and §10.
 
 ## 3. Architecture
 
@@ -141,7 +143,8 @@ scene work dir (room .ply clouds + rgb/ panoramas)
    │                                                               │
    └─ [--pose-source panopin]                                      │
         ├─ (a) line maps + sphere features        [scan_env]       │
-        │       …or reuse cached artifacts                         │
+        │       built FRESH from the raw room .ply                  │
+        │       (identity metadata.json, raw S3DIS frame)           │
         ├─ (b) PanoPin seeding                    [panopin-gpu]    │
         │       low-pct scores → room-anchored seeds               │
         │       → demo6_alignment.json + admitted pano list        │
@@ -158,12 +161,19 @@ Both arms converge on the identical contract file; downstream cannot tell them a
 
 ### 4.1 Settling the FGPL source of truth
 
-1. Merge `feat/upright-rotation-prior` (4 commits, incl. `b12ec86`, the load-bearing canonical-frame
-   fix) into `ruoyu-yan/scan2measure-webframework`'s `main`, so the pin lands on a stable commit.
-2. Re-point `.gitmodules` URL from `ugurfeyzullah/…` to `ruoyu-yan/…`.
-3. Pin to the merged commit and initialize the submodule.
+1. Re-point `.gitmodules` URL from `ugurfeyzullah/…` to `ruoyu-yan/…`.
+2. **Pin directly to `528061b`** (HEAD of `feat/upright-rotation-prior`, which contains `b12ec86`,
+   the load-bearing canonical-frame fix). **The branch stays unmerged** — user decision, 2026-07-20.
+3. Initialize the submodule.
 
 This makes "FGPL + prior, inside Point_360" true in the repo rather than true only on one machine.
+
+**Caveat on pinning to an unmerged branch head.** `528061b` is pushed and reachable via
+`origin/feat/upright-rotation-prior` (verified 2026-07-20), so the pin is valid today. But its
+reachability depends on that branch ref surviving: **do not delete or force-push
+`feat/upright-rotation-prior` while the submodule pin references it**, or the pointer dangles and
+`git submodule update --init` fails on a fresh clone. If the branch is ever merged and deleted,
+re-pin to the merge commit first.
 
 ## 5. Gates and error handling
 
@@ -224,10 +234,15 @@ run went 10/22 → 0/22. **A convention adapter tested against identity matrices
 
 ## 7. Acceptance criteria
 
-1. **The unit reproduces D36.** Compare Stage 0's output poses against S3DIS GT on the Manhattan
-   pool; PanoPin's harness achieved 5/5 rooms and 0.084 m median. Materially different poses from
-   the same inputs mean the wiring is wrong. This isolates integration error from method error
-   before any BIM is built.
+1. **The unit reproduces D36 from a fresh rebuild.** Compare Stage 0's output poses against S3DIS GT
+   on the Manhattan pool; PanoPin's harness achieved 5/5 rooms and 0.084 m median.
+
+   Note this is a *stronger and noisier* test than the cached-artifact version, because the line
+   maps and sphere features are rebuilt (§7.1) rather than reused. It therefore **conflates two
+   error sources**: wiring mistakes and rebuild variance. If the fresh run disagrees with D36, do
+   not guess — re-run the same unit against the cached D33/D36 artifacts as a bisect step. Same
+   inputs reproducing D36 isolates the fault to the rebuild; a disagreement there isolates it to the
+   wiring. Keeping the cached path runnable is therefore a **requirement**, not a convenience.
 2. **Gate 1 fails closed, demonstrably.** Pointed at a commit without the prior, the unit refuses
    to run.
 3. **Gate 2 passes** on the Manhattan pool output.
@@ -240,13 +255,27 @@ run went 10/22 → 0/22. **A convention adapter tested against identity matrices
    rubber-stamp a regression or cry wolf. A human judges the delta; the spec guarantees it is
    measured and visible.
 
-### 7.1 Scope boundary
+### 7.1 Fresh rebuild from a raw room cloud
+
+**User decision, 2026-07-20: the acceptance run rebuilds from raw; it does not reuse cached
+artifacts.**
 
 FGPL needs line maps and sphere features built from the cloud before the estimator runs (in PanoPin:
-`build_linemap.py` / `build_features.py` / `build_ply.py`, under `scan_env`). For the S3DIS Manhattan
-acceptance target these artifacts are cached, so Stage 0 **supports** building them but the
-acceptance run reuses the cache. Building from a raw product cloud is a known, separately-testable
-extension rather than an untested assumption baked into version one.
+`build_linemap.py` / `build_features.py` / `build_ply.py`, under `scan_env`). Stage 0 runs these
+against a raw Manhattan room `.ply` from Area_3, so the build path is exercised end-to-end rather
+than assumed.
+
+**Frame: raw S3DIS, identity `metadata.json`** — the same convention D25/D36 used. The run does
+*not* go through the density-image front-end, so `metadata.json` carries no `R≠I` transform.
+
+Consequences, recorded so they are not mistaken for coverage:
+
+- The build path from a cloud **is** proven by this run.
+- `fgpl_export.raw_t_to_camera_position`'s frame round-trip guard is **still never exercised**. It
+  exists precisely for the `R≠I` case, and that case remains untested (§10).
+- Gate 2 (§5.2) therefore still validates only the identity-frame convention. A later run through
+  the full front-end is the natural follow-up and is the closest analogue to a genuine product scan.
+- The cached-artifact path must remain runnable as a bisect tool (§7 criterion 1).
 
 ## 8. Concurrency and branching
 
@@ -282,11 +311,12 @@ Unrelated but worth recording: local `main` (85f35a0) has diverged from `origin/
 ## 9. Task order
 
 1. Create the worktree and branch (§8).
-2. Merge the prior into the scan2measure fork's `main`; re-point and pin the FGPL submodule (§4.1).
+2. Re-point the FGPL submodule to the fork, pin to `528061b`, initialize (§4.1).
 3. Add the PanoPin submodule; add PanoPin's CLI wrapper (§3.2).
 4. `localization/fgpl_pose_adapter.py` + its test (§6) — pure, testable first.
 5. `localization/preflight.py` + its test, including Gate 1 (§5.1).
-6. `run_localization.py` orchestration, including Gate 2 wiring (§5.2).
+6. `run_localization.py` orchestration: the fresh build step (§7.1), PanoPin seeding, the FGPL
+   estimator, and Gate 2 wiring (§5.2). Keep the cached-artifact path selectable for bisecting.
 7. Acceptance runs 1–5 (§7).
 8. Merge back into `s3dis-eval` (§8).
 
@@ -299,6 +329,9 @@ Unrelated but worth recording: local `main` (85f35a0) has diverged from `origin/
 | Submodule left uninitialized (today's actual state) | Preflight check fails closed |
 | Acceptance target is Area_3, Manhattan-filtered, n=22 | Acknowledged; cross-area tracked separately as T5 |
 | Other session's work collides | Worktree isolation; disjoint file surfaces |
+| `R≠I` density-image transform never exercised; `fgpl_export`'s round-trip guard untested | Accepted for this version (§7.1). Follow-up run through the full front-end. |
+| Fresh rebuild conflates wiring error with rebuild variance | Cached-artifact path kept runnable as a bisect step (§7 criterion 1) |
+| Submodule pin references an unmerged branch head | Do not delete or force-push `feat/upright-rotation-prior`; re-pin before any merge-and-delete (§4.1) |
 
 ## 11. Open question
 
