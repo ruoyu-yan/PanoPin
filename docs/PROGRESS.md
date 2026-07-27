@@ -2,6 +2,38 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-07-27 — FGPL estimator seeded + 5x5 seed sweep for the paper; the RNG was NOT the source of variation, a rebuilt line map was)
+
+- **Goal this session:** turn PanoPin + the upright prior into a publishable performance comparison
+  for the Point_360 manuscript. Deliverables live in **`Point_360/data/figures/PanoPin + Prior/`**:
+  `PERFORMANCE.md` (the comparison), `ablation_table.tex` (VGTC single column, compiles with no
+  overfull box), `_scripts/` (regenerates everything from per-panorama data), and
+  `verify_reproducibility.py`.
+- **Shipped:** the FGPL estimator now seeds its own RNG — scan2measure **`c423806`** on
+  `feat/upright-rotation-prior`, **PUSHED**. `random_seed` defaults to 0, overridable per config.
+  Two runs of one seeded config are 22/22 bit-identical; a later fresh run matched byte-for-byte.
+  `torch.set_num_threads(1)` was NOT needed, so this costs no wall-clock (unlike D37's `pin()`).
+- **Ran a 5-seed x 5-arm sweep (25 estimator runs, ~4.5 h).** Result: on identical inputs the
+  estimator is essentially seed-invariant — rooms covered, wrong-room rate and rotation-locked count
+  identical across all five seeds of all five arms. Mechanism measured: 164 sparse lines ->
+  `n_sample = 1` -> the Chamfer filter removed 0 of 1953 candidates in five of six seeds.
+- **🔴 CORRECTION (D38): I first blamed the 2026-07-16-vs-now differences on the RNG. Wrong.**
+  The cause is the **2026-07-20 rebuild of `linemap_manhattan/3d_line_map.pkl` and
+  `clouds/area3_manhattan.ply`** (the Stage-0 acceptance run overwrote them). So the old numbers —
+  including room-anchored **0.045 m** and method **0.084 m / 14-22 locked** — were computed against
+  different geometry and are **not comparable**. Do not quote them.
+- **Current headline (5 seeds, current geometry):** FGPL alone 1/5 rooms, 82% wrong-room,
+  14.05 m median, 58.5 s/pano -> **+ prior + PanoPin 5/5 rooms, 18% wrong-room, 0.086 m,
+  7.1 s/pano**. The `+ prior only` control still barely moves translation (13.32 m), so placement
+  remains the thing PanoPin fixes. GT-seeded ceiling: 0.061 m, 12/22 within 10 cm, 19/22 locked —
+  the method is within one panorama of it on the locked count.
+- **New claim available:** **8.2x speedup** per panorama (medians over 110 samples/arm), because a
+  seeded run searches only its Voronoi region instead of the whole five-room map.
+- **NEXT:** (a) decide whether to move Point_360's submodule pin off `cff1cab` so `s3dis-eval`
+  actually picks up the seeded estimator — not done, deliberately; (b) cross-area validation is
+  still open (Area_3 only, n=22, one scene); (c) the 2026-07-21 "12/22 panoramas differ" two-run
+  result could not be reproduced under this sweep and remains unexplained; (d) T9/T10 untouched.
+
 ## Current state (2026-07-20 — Scan2BIM localization unit: Stage 0 + PanoPin's first CLI built, acceptance 5/5 PASS after fixing a determinism bug mischaracterized since D1; branch feat/localization-unit READY TO MERGE, NOT YET MERGED — do the merge first next session)
 - Executed the 9-task SDD plan `docs/plans/2026-07-20-scan2bim-localization-unit.md` (spec
   `docs/specs/2026-07-20-scan2bim-localization-unit-design.md`), subagent-driven, in a **worktree**

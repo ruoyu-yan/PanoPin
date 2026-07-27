@@ -735,3 +735,55 @@ drifting >1 m on 7/22 (max 27.46 m) — the drifted seeds mapped 1:1 onto the ba
 - **Cross-reference:** corrects **D1**; the reproduced number is **D36**'s (0.084 m, strictly-Manhattan
   5-room/22-pano pool). Full root-cause narrative in `localization/ACCEPTANCE.md` §2 (Point_360 repo,
   read-only from PanoPin's side).
+
+## D38 (2026-07-27) — The FGPL estimator now seeds its own RNG. The RNG was never the problem; a rebuilt line map was.
+
+- **Context:** preparing the PanoPin + upright-prior performance comparison for the paper, the
+  estimator's unseeded `torch.randperm` (`pose_search.py:227`, inside
+  `generate_translation_grid`) was flagged as a publication risk. Nothing under
+  `src/pose_estimation/` seeded torch anywhere, and the estimator runs as a **subprocess**, so
+  PanoPin's `determinism.pin()` in the parent (D37) could not reach it.
+- **Fix:** `np.random.seed` + `torch.manual_seed` at the top of `main()`, seed from
+  `cfg.get("random_seed", 0)` — scan2measure `c423806` on `feat/upright-rotation-prior`, PUSHED.
+  The default is a constant, not data, so a user with their own scans and no pose GT gets
+  reproducibility with nothing to supply.
+- **Verified:** two runs of one seeded config are **22/22 bit-identical**. A later *fresh* run of
+  an already-swept (arm, seed) was also 22/22 byte-identical (gate G2).
+- **`torch.set_num_threads(1)` was NOT required.** Seeding alone sufficed, so unlike D37's `pin()`
+  this determinism costs no wall-clock. That contradicts `determinism.py`'s docstring, which names
+  multi-threaded float reduction order the larger wobble source — true for the CPO path it was
+  written for, not for the FGPL estimator. Measured on this scene only.
+- **⚠ THE SEED CHANGES ALMOST NOTHING HERE, and this is measured, not assumed.** A 5-seed x 5-arm
+  sweep (25 estimator runs) on identical inputs: **rooms covered, wrong-room rate and
+  rotation-locked count are identical across all five seeds of all five arms**; 85/88 per-panorama
+  outputs are byte-identical for the method arm, 20/20 for room-anchored. Mechanism, measured
+  directly: the line map has 164 sparse lines so `n_sample = max(1, 164//100) = 1`; that single
+  midpoint's Chamfer filter removed **0 of 1953 candidates in five of six seeds and 3 of 1953
+  once**. The winner essentially never changes. The seed is therefore **insurance, not a
+  correction** — keep it, because the same code IS seed-sensitive where a tight search region packs
+  the grid densely enough for one midpoint to remove hundreds of candidates.
+- **🔴 CORRECTS AN ATTRIBUTION I INITIALLY GOT WRONG.** Differences between the 2026-07-16 recorded
+  results and current ones (room-anchored **0.045 m → 0.513 m**, method rotation-locked 14/22 →
+  18/22) were first blamed on RNG. **The sweep rules that out** — five seeds give byte-identical
+  room-anchored output. The real cause is a **changed input**: `linemap_manhattan/3d_line_map.pkl`
+  and `clouds/area3_manhattan.ply` were **rebuilt 2026-07-20** by the Stage-0 acceptance run, which
+  overwrote the originals. FGPL's code is excluded too — the upright-prior fix `b12ec86` landed
+  13:03 on 2026-07-16, before the recorded upright arms ran at 13:07 and 13:39. The counterfactual
+  cannot be run (the old line map is gone), so this is attribution by elimination; what is directly
+  measured is that the RNG is not responsible.
+- **Consequence for the paper:** the pre-2026-07-20 numbers (0.084 m, 0.045 m, 14/22 locked) were
+  computed against different geometry. **Do not quote them, and do not present them as an
+  alternative draw of the same experiment.** Also unreconciled: the 2026-07-21 two-run test that
+  found 12/22 panoramas differing (D37 block) cannot be reproduced here — different code path
+  (`run_localization.py`) and region geometry are the likely reason, but that is untested.
+- **Bonus result:** PanoPin's seed makes the SAME estimator **8.2x faster** per panorama
+  (58.5 s -> 7.1 s, medians over 110 samples per arm), because global mode searches the whole
+  five-room map while a seeded run searches only its Voronoi region. The upright prior contributes
+  a separate ~1.2x by cutting rotation candidates 24 -> ~4. A second contribution axis the project
+  was not previously claiming.
+- **Artifacts:** `Point_360/data/figures/PanoPin + Prior/` — `PERFORMANCE.md` (the comparison),
+  `ablation_table.tex` (VGTC single column, compiles clean), `_scripts/` (regenerates everything),
+  `verify_reproducibility.py` (gates G1 code identity / G2 fresh-run determinism / G3 artifact
+  identity — all PASS 2026-07-27).
+- **Cross-reference:** extends **D37** (which fixed the PanoPin seed path, not the estimator);
+  supersedes the RNG reading of **D36**'s numbers.
