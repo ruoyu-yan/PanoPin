@@ -135,7 +135,8 @@ These warnings are the hooks the later merge / closed-loop step will act on.
 - a duct or soffit spanning a corridor's full width splits it;
 - open-plan spaces;
 - a room whose ceiling is lower than the scene's single ceiling height has its band inside the room
-  volume, so it fills with points.
+  volume, so it fills with points. A room whose ceiling is more than ~0.6 m below the scene ceiling has no
+  walls in the band and merges SILENTLY with its neighbours (no warning fires; only K > N warns).
 
 ## 6. Evaluation
 

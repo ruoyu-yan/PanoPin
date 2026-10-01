@@ -791,14 +791,16 @@ drifting >1 m on 7/22 (max 27.46 m) — the drifted seeds mapped 1:1 onto the ba
 ## D39 (2026-10-01) — Room segmentation = "enclosure" on a ceiling band (T11)
 
 PanoPin now builds its own `{room: cloud}` candidates (`panopin.cli segment`). The method is a
-5 cm band [ceiling − 0.60, ceiling − 0.10]: walls plus lintels, so open doors close and furniture
+ceiling band [ceiling − 0.60, ceiling − 0.10] rasterised at 5 cm: walls plus lintels, so open doors close and furniture
 drops out. Rooms are the free-space connected components, slivers and specks are dropped, and every
 footprint cell is filled to its nearest room within 1 m.
 
 Why:
 - The literature review (`docs/room-segmentation-literature-review.md`) found that the image, not
   the segmenter, decides the result on furnished scans with open doors.
-- The 2026-10-01 probe closed every room on both dev scenes, where the HOV-SG band leaked.
+- The 2026-10-01 probe closed every room on both dev scenes, where the HOV-SG band leaked; but in the
+  scored dev run B1 tied the method (`docs/roomseg-results.md`), so the ceiling band's advantage over the
+  HOV-SG band is not yet demonstrated on our data.
 - The approach is deterministic, CPU-only, has no Manhattan assumption, and needs no training.
 
 Measured amendments (spec §4, §5, §6.3):

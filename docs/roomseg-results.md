@@ -34,8 +34,9 @@ K=6 vs G=6 · F1@0.5 1.00 · F1@0.7 1.00 · PQ 0.998 · unassigned 0.00% · spli
 
 containment: pred 18/19, GT partition itself 19/19
 
-Both dev scenes pass spec §8 criterion 2. K = G, F1@0.7 = 1.00, there are no splits or merges, and every
-end-to-end station's camera lies inside its matched segment (see the containment note).
+Both dev scenes pass spec §8 criterion 1 (room level): K = G, F1@0.7 = 1.00, and there are no splits or
+merges. They also pass criterion 2 (containment): every end-to-end station's camera lies inside its matched
+segment (see the containment note).
 
 ## Dev — baseline B1 (HOV-SG band)
 Band [1.49, 2.41] m.
@@ -146,9 +147,9 @@ K=7 vs G=7 · F1@0.5 1.00 · F1@0.7 1.00 · PQ 0.994 · unassigned 0.00% · spli
 containment: pred 36/37, GT partition itself 35/37
 
 ### Holdout verdict
-Both holdout scenes pass spec §8 criterion 2: K = G, F1@0.7 = 1.00, no splits or merges, every GT room
-matched at IoU ≥ 0.7.
-- **End-to-end stations** (keys of Point_360 `data/full_runs/<scene>/stage0_localization/key_map.json`):
+Both holdout scenes pass spec §8 criterion 1 (room level): K = G, F1@0.7 = 1.00, no splits or merges, every
+GT room matched at IoU ≥ 0.7.
+- **End-to-end stations, criterion 2 (containment)** (keys of Point_360 `data/full_runs/<scene>/stage0_localization/key_map.json`):
   manhattan4 4/4 inside their matched segment (123cfbc1 office_6, 618991c8 office_7, eeebfd9d office_8,
   12ea36aa hallway_2); manhattan7 7/7 (those four plus 243d8e79 office_4, 0c9d4638 office_5, c5377d49
   hallway_3).
@@ -189,12 +190,17 @@ With 4 panos the median is the mean of the 2nd and 3rd errors, so the two FGPL f
 set it in both arms. Both arms pick every room correctly (4/4). The pred arm's errors are larger only on the
 two panos FGPL already fails in the gt arm.
 
-**Stage 0 is not reproducible run to run.** The fresh gt arm (median 0.658 m) does not reproduce the
-2026-10-01 `full_runs/Area_2_manhattan4` run (0.055 m) on the same inputs and config (the `pose_config.json`
+**A fresh run did not reproduce the 2026-10-01 `full_runs` result on identical inputs.** The fresh gt arm
+(median 0.658 m) does not reproduce the 2026-10-01 `full_runs/Area_2_manhattan4` run (0.055 m) on the same
+inputs and config (the `pose_config.json`
 files differ only in their paths). There, hallway_2 was 0.019 m off; here it is 1.869 m off. The PanoPin
 seed scores (hallway_2 0.048 → 0.091) and the FGPL ICP inlier counts change between runs, even though the
-preflight reports "PanoPin determinism fix present". This run-to-run noise (> 1 m on single panos) is much
-larger than the 0.05 m margin, so the trans_median check on 4–7 panos is not a reliable test of the segments.
+preflight reports "PanoPin determinism fix present". This is one fresh run against one historical run, so
+it does not yet show that Stage 0 is non-deterministic. There is counter-evidence: on Area_3_manhattan4 the
+two fresh arms, with different clouds, gave identical per-pano errors (see below). The cheap test that would
+settle it is a second fresh GT-arm run on Area_2_manhattan4 (PROGRESS NEXT item 1). If the noise is real
+(> 1 m on single panos), it is much larger than the 0.05 m margin, and the trans_median check on 4–7 panos
+would not be a reliable test of the segments.
 
 ### Other per-pano notes
 - Area_3_manhattan4: the gt and pred errors are identical per pano (hallway_1 3.257, office_3 2.850,
@@ -208,10 +214,21 @@ larger than the 0.05 m margin, so the trans_median check on 4–7 panos is not a
 - Criterion 1 (room level, earlier sections): passes on all four scenes.
 - Criterion 2 (containment): 4/4 scenes pass (every e2e pano contained).
 - Criterion 3 (end-to-end): room accuracy pred ≥ gt on 4/4; translation median within gt + 0.05 m on 3/4 —
-  **fails** on Area_2_manhattan4 (0.885 > 0.658 + 0.05).
+  **fails** on Area_2_manhattan4 (0.885 > 0.658 + 0.05). On the two Area_3 scenes FGPL fails on most
+  stations in both arms, so those two passes compare failure with failure and carry little information.
 
-**Bar (b) is not met** (criterion 3 fails on Area_2_manhattan4). The likely cause is that Stage 0 is not
-reproducible run to run, which this plan did not investigate: on identical inputs the fresh GT arm gives
-0.658 m against 0.055 m in the 2026-10-01 full_runs (hallway_2 0.019 → 1.869 m). Area_2_manhattan7 points the
+**Bar (b) is not met** (criterion 3 fails on Area_2_manhattan4). The suspected cause, not yet confirmed (see
+above), is that Stage 0 is not reproducible run to run, which this plan did not investigate: on identical
+inputs the fresh GT arm gives 0.658 m against 0.055 m in the 2026-10-01 full_runs (hallway_2 0.019 → 1.869 m). Area_2_manhattan7 points the
 same way: the same hallway_2 pano is 4.244 m off in the GT arm and 0.035 m off in the pred arm, a 4 m swing in
 pred's favour that fits run noise rather than a segmentation effect.
+
+## Known weak spots
+From spec §5, plus one found since:
+- A wall gap wider than ~0.3 m with no wall above it (glass, a big scan hole) merges two rooms.
+- A duct or soffit spanning a corridor's full width splits it.
+- Open-plan spaces.
+- A room whose ceiling is lower than the scene's single ceiling height has its band inside the room
+  volume, so it fills with points.
+- **New:** a room whose ceiling is more than ~0.6 m below the scene ceiling has no walls in the band and
+  merges SILENTLY with its neighbours (no warning fires; only K > N warns).
