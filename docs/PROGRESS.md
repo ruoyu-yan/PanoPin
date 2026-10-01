@@ -2,6 +2,27 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-10-01 — room-segmentation literature review; review only, nothing implemented, NOT committed)
+
+- **Why:** every PanoPin/Stage-0 result so far used the S3DIS **GT room partition** as `--clouds`.
+  Deployment gives one merged cloud, so PanoPin must produce `{room: cloud}` itself.
+- **Wrote** `docs/room-segmentation-literature-review.md` (5 parallel threads, ~110 papers retained).
+  Headline:
+  - Use a **ceiling-band image (above door heads), not full height**. This closes open doors and
+    drops furniture.
+  - Learned floorplan nets collapse on S3DIS.
+  - SAM 3's "floor plan" text prompt is the wrong tool.
+  - S3DIS cuts some hallways with no wall: `Area_2_manhattan7` hallway_2|hallway_3 at x = 7.77.
+- **Shortlist:** ① band → seeded watershed → merge to K = N; ② band → point-prompted SAM;
+  ③ closed loop segment → PanoPin → re-seed from pano positions.
+- **Measured this session:**
+  - The merged scene `.ply` = the exact union of the room `.txt` files.
+  - Room clouds are disjoint (walls not duplicated).
+  - `Area_3/1.e57` = a per-room GT export with no poses (not a source of station seeds; solvers must
+    not read it).
+- **NEXT:** the user answers §10's open questions (hallway GT convention; K = N guarantee; GPU in seed
+  step; `IfcSpace` check), then a brainstorm → spec for ① + the §8.4 evaluation harness.
+
 ## Current state (2026-07-27 — FGPL estimator seeded + 5x5 seed sweep for the paper; the RNG was NOT the source of variation, a rebuilt line map was)
 
 - **Goal this session:** turn PanoPin + the upright prior into a publishable performance comparison
