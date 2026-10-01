@@ -175,7 +175,7 @@ Merged clouds live in `Point_360/data/pointcloud/stanford/`. GT rooms are S3DIS 
 - The scorer uses numpy/scipy, unlike the stdlib-only harness (D6). This is recorded as D40.
 
 ### 6.3 Baselines
-- **B1:** the same pipeline with the full-height image (`band = full`). It measures what the band buys.
+- **B1:** the same pipeline on the HOV-SG band [floor + 1.5, ceiling − 0.3] (`--baseline-hovsg`). *Amended 2026-10-01 (plan Task 7):* a full-height band is degenerate for the enclosure method, because every cell holds points, so there is no free space. The HOV-SG band is the published alternative that the probe showed leaking.
 - **B0** (optional): the thesis route, i.e. 256² full-height image + SAM3 "floor plan", polygons
   lifted the same way. Scored once on all four scenes if the thesis environment still runs.
 
