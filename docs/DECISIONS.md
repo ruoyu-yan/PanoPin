@@ -787,3 +787,33 @@ drifting >1 m on 7/22 (max 27.46 m) — the drifted seeds mapped 1:1 onto the ba
   identity — all PASS 2026-07-27).
 - **Cross-reference:** extends **D37** (which fixed the PanoPin seed path, not the estimator);
   supersedes the RNG reading of **D36**'s numbers.
+
+## D39 (2026-10-01) — Room segmentation = "enclosure" on a ceiling band (T11)
+
+PanoPin now builds its own `{room: cloud}` candidates (`panopin.cli segment`). The method is a
+5 cm band [ceiling − 0.60, ceiling − 0.10]: walls plus lintels, so open doors close and furniture
+drops out. Rooms are the free-space connected components, slivers and specks are dropped, and every
+footprint cell is filled to its nearest room within 1 m.
+
+Why:
+- The literature review (`docs/room-segmentation-literature-review.md`) found that the image, not
+  the segmenter, decides the result on furnished scans with open doors.
+- The 2026-10-01 probe closed every room on both dev scenes, where the HOV-SG band leaked.
+- The approach is deterministic, CPU-only, has no Manhattan assumption, and needs no training.
+
+Measured amendments (spec §4, §5, §6.3):
+- ceiling = lowest peak of the top cluster (Area_2 ceilings at 2.58–2.81 m);
+- a mid-height slab is refused as a second storey;
+- B1 = the HOV-SG band, because full height is degenerate for the enclosure method;
+- gap closing = the walls are DILATED by `gap_close_r` (0.15 m) instead of a morphological closing,
+  because a closing cannot bridge a gap in a 1-cell-thin wall (spec §4 step 4, amended at plan review).
+
+Corridor convention A (S3DIS as shipped), with N panos as an upper bound on rooms (user decisions
+2026-10-01). Results: `docs/roomseg-results.md`.
+
+## D40 (2026-10-01) — The room-segmentation scorer uses numpy/scipy (deviation from D6)
+
+`eval/roomseg_gt.py` / `eval/roomseg_score.py` score millions of points: KD-tree GT matching,
+voxel majorities, Hungarian matching. Stdlib-only (D6) would be impractically slow. The original
+harness (`eval/score.py`, `eval/metrics.py`) stays stdlib-only and untouched; the new scorer is a
+separate module.

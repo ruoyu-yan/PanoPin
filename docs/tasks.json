@@ -96,6 +96,14 @@
       "passes": false,
       "verify": "multiroom_pose_estimation emits a per-pose rotation margin (best minus best-of-other-rot_idx n_tight) into local_filter_results.json; margin >= 13 certifies good poses with zero false positives on the manhattan arms",
       "notes": "Detects what neither fix cures: 42/44 separation, ZERO false positives (good margins 3-56, aliased 0-11; several aliased poses have margin 0 = an exact tie broken arbitrarily by the sort). Computed WITHIN a pano so it avoids the absolute-threshold calibration trap that sank tau=0.10. multiroom_pose_estimation.py:471 already computes every candidate's n_tight and discards the runner-up; rot_idx is on top_poses[i]. Threshold 13 is tuned on one scene -- validate elsewhere."
+    },
+    {
+      "id": "T11",
+      "title": "Automatic room segmentation: one merged cloud -> {room: cloud} candidates (panopin.cli segment)",
+      "status": "in_progress",
+      "passes": false,
+      "verify": "conda run -n panopin python -m pytest tests/test_roomseg_*.py -q -> all pass; docs/roomseg-results.md: all 4 scenes K=G, F1@0.7=1.00, 0 splits/merges (criterion 1 pass); every e2e pano contained on 4/4 (criterion 2 pass); two_arm.py room acc pred>=gt on 4/4 but trans median <= gt+0.05 m on only 3/4 (criterion 3 FAILS on Area_2_manhattan4) -> bar (b) not yet met",
+      "notes": "Spec docs/specs/2026-10-01-room-segmentation-design.md, plan docs/plans/2026-10-01-room-segmentation.md, D39/D40. FAILING: bar-(b) criterion 3 (end-to-end) on Area_2_manhattan4 -- trans median pred 0.885 m > gt 0.658 m + 0.05 m (room acc 1.00/1.00; the gap is set by two panos FGPL already fails in the gt arm). Likely cause, NOT investigated: Stage 0 is not reproducible run to run -- the fresh gt arm (0.658 m) does not reproduce the 2026-10-01 full_runs/Area_2_manhattan4 run (0.055 m) on identical inputs (hallway_2 0.019 -> 1.869 m), so the 0.05 m margin is below the run noise. Next: (1) investigate Stage-0 non-reproducibility (PanoPin seed / FGPL) before re-judging criterion 3; (2) separate spec: merge-to-K<=N and the segment<->PanoPin closed loop (review shortlist 3); (3) wiring `segment` into Point_360 run_localization.py."
     }
   ]
 }

@@ -2,6 +2,41 @@
 
 _Newest first. Update at the END of every session: what changed, what's next, where you stopped._
 
+## Current state (2026-10-01 — T11 automatic room segmentation built and scored; bar (b) NOT met, likely Stage-0 noise)
+
+- **Built** (branch `feat/room-segmentation`; spec `docs/specs/2026-10-01-room-segmentation-design.md`,
+  plan `docs/plans/2026-10-01-room-segmentation.md`, D39/D40):
+  - `panopin.cli segment` (`src/panopin/roomseg/`): one merged cloud → ceiling band → walls → free-space
+    rooms → nearest-room fill → the `clouds.json` that `seed` consumes.
+  - The scorer `eval/roomseg_gt.py` + `eval/roomseg_score.py` (numpy/scipy, D40; the original harness
+    is untouched).
+  - `experiments/roomseg/two_arm.py`: Stage 0 run fresh twice per scene, GT room clouds vs predicted.
+- **Verdict** (numbers from `docs/roomseg-results.md`; parameters frozen at `c8b8928`, holdout scored once):
+  - **Criterion 1 (room level): PASS on all 4 scenes**, defaults unchanged. K = G, F1@0.7 = 1.00, no
+    splits or merges. PQ: Area_3_manhattan4 0.999, Area_3_manhattan6 0.998 (dev); Area_2_manhattan4
+    1.000, Area_2_manhattan7 0.994 (holdout). The `hallway_2`|`hallway_3` corridor door is honoured.
+  - Baseline B1 (HOV-SG band) equals the method on dev (F1@0.7 1.00 both; manhattan6 PQ 0.996 vs 0.998),
+    so the dev scenes do not show what the ceiling band buys.
+  - **Criterion 2 (containment of end-to-end panos): PASS 4/4** (4/4, 6/6, 4/4, 7/7). All-pano
+    containment is reported, not gated (spec §8): pred 14/15, 18/19, 16/16, 36/37. The dev miss is
+    `camera_5c2959c3…_office_5` in a door alcove; it is not an e2e station.
+  - **Criterion 3 (end-to-end): FAIL on Area_2_manhattan4.** Room acc pred ≥ gt on 4/4 (1.00 everywhere).
+    Translation median gt / pred: 1.893 / 1.893, 1.243 / 1.111, **0.658 / 0.885 (> gt + 0.05)**,
+    0.053 / 0.038 m.
+  - **Bar (b) is not met.** Likely cause, not investigated: Stage 0 is not reproducible run to run. On
+    identical inputs the fresh gt arm gives 0.658 m against 0.055 m in the 2026-10-01 full_runs
+    (hallway_2 0.019 → 1.869 m), even though the preflight reports the PanoPin determinism fix present.
+    That noise (> 1 m on single panos) dwarfs the 0.05 m margin. T11 stays `in_progress`, `passes: false`.
+- **Point_360 edits (untracked, NOT committed there):** `data/full_runs/_scripts/loc_inputs.py` line ~31
+  now takes the scene's area from argv (was Area_2 only); new dirs `data/full_runs/Area_3_manhattan{4,6}/`
+  (Area_3 Stage-0 inputs built via `experiments/roomseg/area3_stage0_selection.py`).
+- **NEXT:**
+  1. Investigate Stage-0 non-reproducibility (PanoPin seed scores and FGPL ICP inliers change between
+     runs) before re-judging criterion 3.
+  2. Merge-to-K ≤ N / the segment ↔ PanoPin closed loop (review shortlist ③), as a separate spec.
+  3. Wire `segment` into Point_360 Stage 0 (`run_localization.py`).
+  4. The whole-`Area_2.ply` stretch run.
+
 ## Current state (2026-10-01 — room-segmentation literature review; review only, nothing implemented, NOT committed)
 
 - **Why:** every PanoPin/Stage-0 result so far used the S3DIS **GT room partition** as `--clouds`.
