@@ -110,3 +110,52 @@ No changes: defaults passed both dev scenes.
 B1 = `HOVSG` = the defaults with `band_from_floor=1.5`, `band_top=0.30`.
 
 Frozen at commit c8b8928.
+
+## Holdout (Area_2) — scored once at 42be7e1
+Parameters frozen at c8b8928 (`params.py` unchanged since); one run per scene, no tuning.
+Area_2_manhattan4: floor 0.08 m, ceiling 2.64 m, band [2.04, 2.54] m. Area_2_manhattan7: floor −0.01 m,
+ceiling 2.59 m, band [1.99, 2.49] m. No warnings on either.
+
+### Area_2_manhattan4 (holdout) — runs/roomseg/Area_2_manhattan4
+
+K=4 vs G=4 · F1@0.5 1.00 · F1@0.7 1.00 · PQ 1.000 · unassigned 0.00% · splits none · merges none
+
+| GT room | segment | IoU |
+|---|---|---|
+| hallway_2 | seg_00 | 1.000 |
+| office_6 | seg_02 | 1.000 |
+| office_7 | seg_03 | 0.999 |
+| office_8 | seg_01 | 1.000 |
+
+containment: pred 16/16, GT partition itself 16/16
+
+### Area_2_manhattan7 (holdout) — runs/roomseg/Area_2_manhattan7
+
+K=7 vs G=7 · F1@0.5 1.00 · F1@0.7 1.00 · PQ 0.994 · unassigned 0.00% · splits none · merges none
+
+| GT room | segment | IoU |
+|---|---|---|
+| hallway_2 | seg_03 | 1.000 |
+| hallway_3 | seg_00 | 1.000 |
+| office_4 | seg_02 | 0.979 |
+| office_5 | seg_01 | 0.980 |
+| office_6 | seg_05 | 1.000 |
+| office_7 | seg_06 | 0.999 |
+| office_8 | seg_04 | 1.000 |
+
+containment: pred 36/37, GT partition itself 35/37
+
+### Holdout verdict
+Both holdout scenes pass spec §8 criterion 2: K = G, F1@0.7 = 1.00, no splits or merges, every GT room
+matched at IoU ≥ 0.7.
+- **End-to-end stations** (keys of Point_360 `data/full_runs/<scene>/stage0_localization/key_map.json`):
+  manhattan4 4/4 inside their matched segment (123cfbc1 office_6, 618991c8 office_7, eeebfd9d office_8,
+  12ea36aa hallway_2); manhattan7 7/7 (those four plus 243d8e79 office_4, 0c9d4638 office_5, c5377d49
+  hallway_3).
+- **Corridor door (convention A).** The `hallway_2`|`hallway_3` door at x = 7.77 is honoured: the corridor
+  comes out as two segments (hallway_2 → seg_03, hallway_3 → seg_00, both IoU 1.000). In `rooms.png` the
+  horizontal corridor and the vertical corridor are separate colours.
+- **All-pano containment (reported, not gated).** The one predicted miss in manhattan7 is
+  `camera_e70395f2…_hallway_3`, which falls in seg_03 (hallway_2). The GT partition itself also puts this
+  camera outside hallway_3, as it does `camera_5a7060af…_hallway_3` (which the method places inside). Neither
+  is an end-to-end station.
