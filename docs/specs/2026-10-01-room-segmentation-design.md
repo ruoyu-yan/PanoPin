@@ -101,7 +101,7 @@ names (`seg_00`, …) carry no meaning, the same as anonymised pano ids.
 
 | Step | What | Parameter (start value) |
 |---|---|---|
-| 1 Heights | z histogram, 2 cm bins. Floor = strongest bin in the lower half of the z range; ceiling = strongest bin in the upper half | `z_bin` 0.02 m |
+| 1 Heights | z histogram, 2 cm bins; strong peaks = local maxima ≥ 0.3 × the tallest bin, clustered when ≤ 0.3 m apart. Floor = strongest peak of the lowest cluster; ceiling = **lowest** peak of the highest cluster. *Amended 2026-10-01 (plan Task 1): Area_2's ceilings sit at 2.58–2.81 m, so the band must sit below the lowest of them; Area_2_manhattan4's desk peak (0.77 m) reaches 0.38 × the tallest bin.* | `z_bin` 0.02, `peak_rel` 0.30, `peak_cluster_gap` 0.30 |
 | 2 Band image | per 5 cm cell, count points with z ∈ [ceiling − 0.60, ceiling − 0.10]; cells with ≥ `wall_min_pts` are **walls** (incl. lintels) | `cell` 0.05 m, `band` (0.60, 0.10) m, `wall_min_pts` 3 |
 | 3 Footprint | cells with any point at any height; fill holes; morphological close | `footprint_close` 0.30 m |
 | 4 Gap closing | morphological close of the wall mask (seals scan holes up to ~2r; must stay below half a door width, so door openings are sealed only by lintels) | `gap_close_r` 0.15 m |
@@ -120,6 +120,7 @@ names (`seg_00`, …) carry no meaning, the same as anonymised pano ids.
 **Fail loudly** (raise `SegmentationError`; the CLI exits non-zero and writes nothing) when:
 - there is no clear floor or ceiling peak;
 - the storey height falls outside 2–6 m (likely multi-storey or not levelled);
+- a strong horizontal slab between floor + 1.8 m and ceiling − 0.5 m (another storey).
 - zero rooms survive cleanup.
 
 **Warn** (in `segmentation.json` `warnings` and on stderr; output still written) when:
