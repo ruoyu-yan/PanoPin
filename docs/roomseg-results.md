@@ -205,11 +205,13 @@ larger than the 0.05 m margin, so the trans_median check on 4–7 panos is not a
   2.020, office_8 0.826, hallway_3 4.451 m (others < 0.04).
 
 ### Bar (b) verdict
-- Criterion 1 (room-level segmentation, earlier sections): passes on all four scenes.
-- Criterion 2 (room accuracy no worse with predicted segments): passes on 4/4 (1.00 in every arm).
-- Criterion 3 (e2e containment): passes on 4/4. Translation median within 0.05 m: 3/4. Area_2_manhattan4 fails
-  (0.885 vs 0.658 + 0.05 m), and the failure is set by two panos FGPL already mislocates in the gt arm. Since Stage 0
-  is not reproducible run to run, this one comparison cannot separate a segment effect from run noise.
-  **Bar (b) as written is therefore not met on 1 of 4 scenes.** The user has to decide whether to accept this.
-  The fix would be to the measurement (repeat runs, or a rule restricted to the panos the gt arm localises),
-  not to the segmenter.
+- Criterion 1 (room level, earlier sections): passes on all four scenes.
+- Criterion 2 (containment): 4/4 scenes pass (every e2e pano contained).
+- Criterion 3 (end-to-end): room accuracy pred ≥ gt on 4/4; translation median within gt + 0.05 m on 3/4 —
+  **fails** on Area_2_manhattan4 (0.885 > 0.658 + 0.05).
+
+**Bar (b) is not met** (criterion 3 fails on Area_2_manhattan4). The likely cause is that Stage 0 is not
+reproducible run to run, which this plan did not investigate: on identical inputs the fresh GT arm gives
+0.658 m against 0.055 m in the 2026-10-01 full_runs (hallway_2 0.019 → 1.869 m). Area_2_manhattan7 points the
+same way: the same hallway_2 pano is 4.244 m off in the GT arm and 0.035 m off in the pred arm, a 4 m swing in
+pred's favour that fits run noise rather than a segmentation effect.
