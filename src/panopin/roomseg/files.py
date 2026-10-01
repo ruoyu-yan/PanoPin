@@ -13,6 +13,8 @@ from .params import DEFAULTS
 def read_cloud(path):
     """(xyz float64[N,3], rgb uint8[N,3]) in file order, from .ply or an S3DIS-style .txt."""
     path = Path(path)
+    if not path.exists():
+        raise SegmentationError(f"{path} not found")
     suffix = path.suffix.lower()
     if suffix == ".ply":
         import open3d as o3d

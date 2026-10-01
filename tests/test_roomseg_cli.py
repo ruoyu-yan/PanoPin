@@ -70,6 +70,13 @@ def test_cloud_without_colours_is_refused_and_nothing_written(tmp_path, capsys):
     assert not out.exists()
 
 
+def test_missing_cloud_is_reported_as_not_found_and_nothing_written(tmp_path, capsys):
+    out = tmp_path / "seg"
+    rc = cli.main(["segment", "--cloud", str(tmp_path / "nope.ply"), "--out-dir", str(out)])
+    assert rc == 2 and "not found" in capsys.readouterr().err
+    assert not out.exists()
+
+
 def test_refused_geometry_writes_nothing(tmp_path, capsys):
     xyz = two_rooms()
     two_storey = np.concatenate([xyz, xyz + np.array([0.0, 0.0, H + 0.2])])
