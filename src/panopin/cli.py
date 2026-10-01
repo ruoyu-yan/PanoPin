@@ -40,6 +40,23 @@ def seed_from_clouds(panos, candidate_clouds, metadata_path, out_path, tau=0.10)
                             metadata_path, out_path, tau=tau)
 
 
+def _segment(args):
+    """`segment` subcommand: exit 0 on success, 2 when the cloud is refused (nothing written)."""
+    from panopin.roomseg import DEFAULTS, HOVSG, SegmentationError
+    from panopin.roomseg.files import segment_cloud
+
+    try:
+        report = segment_cloud(args.cloud, args.out_dir, args.n_panos,
+                               HOVSG if args.baseline_hovsg else DEFAULTS)
+    except SegmentationError as e:
+        print(f"segment: {e}", file=sys.stderr)
+        return 2
+    for w in report["warnings"]:
+        print(f"segment: warning: {w}", file=sys.stderr)
+    print(f"{report['K']} segments -> {args.out_dir / 'clouds.json'}")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="panopin.cli", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -56,7 +73,18 @@ def main(argv=None):
     s.add_argument("--tau", type=float, default=0.10,
                    help="per-pano admission threshold on the low-pct winner score")
 
+    g = sub.add_parser("segment", help="split one merged cloud into per-room candidate clouds")
+    g.add_argument("--cloud", required=True, type=Path, help="merged cloud, .ply (with colours) or .txt")
+    g.add_argument("--out-dir", required=True, type=Path,
+                   help="writes seg_XX.txt, clouds.json (for `seed --clouds`), labels.npy, ...")
+    g.add_argument("--n-panos", type=int, default=None,
+                   help="number of panoramas; warns when segments outnumber them")
+    g.add_argument("--baseline-hovsg", action="store_true",
+                   help="baseline B1: band [floor + 1.5, ceiling - 0.3] instead of the ceiling band")
+
     args = parser.parse_args(argv)
+    if args.command == "segment":
+        return _segment(args)
 
     panos = json.loads(args.panos.read_text())
     clouds = json.loads(args.clouds.read_text())
