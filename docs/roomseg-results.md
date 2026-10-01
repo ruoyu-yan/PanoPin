@@ -109,4 +109,4 @@ No changes: defaults passed both dev scenes.
 
 B1 = `HOVSG` = the defaults with `band_from_floor=1.5`, `band_top=0.30`.
 
-Frozen at commit <filled in Task 8 step 1>.
+Frozen at commit c8b8928.
