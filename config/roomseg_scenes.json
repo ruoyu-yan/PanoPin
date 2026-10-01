@@ -1,0 +1,37 @@
+{
+  "_comment": "Room-segmentation scenes (spec 2026-10-01 §6.1). cloud = the ONLY solver input; rooms_dir/rooms/pose_json are GT for scoring only. e2e_stage0 = Point_360 Stage-0 inputs for the two-arm run (Task 9).",
+  "scenes": {
+    "Area_3_manhattan4": {
+      "split": "dev",
+      "cloud": "/home/ruoyu/Point_360/data/pointcloud/stanford/Area_3/Area_3_manhattan4.ply",
+      "rooms_dir": "/home/ruoyu/Point_360/data/s3dis/Stanford3dDataset_v1.2/Area_3",
+      "rooms": ["hallway_1", "office_3", "office_5", "office_7"],
+      "pose_json": "/home/ruoyu/Point_360/data/s3dis/_multiroom4/pose.json",
+      "e2e_stage0": "/home/ruoyu/Point_360/data/full_runs/Area_3_manhattan4/stage0_localization"
+    },
+    "Area_3_manhattan6": {
+      "split": "dev",
+      "cloud": "/home/ruoyu/Point_360/data/pointcloud/stanford/Area_3/Area_3_manhattan6.ply",
+      "rooms_dir": "/home/ruoyu/Point_360/data/s3dis/Stanford3dDataset_v1.2/Area_3",
+      "rooms": ["hallway_1", "office_3", "office_4", "office_5", "office_6", "office_7"],
+      "pose_json": "/home/ruoyu/Point_360/data/s3dis/_multiroom6/pose.json",
+      "e2e_stage0": "/home/ruoyu/Point_360/data/full_runs/Area_3_manhattan6/stage0_localization"
+    },
+    "Area_2_manhattan4": {
+      "split": "holdout",
+      "cloud": "/home/ruoyu/Point_360/data/pointcloud/stanford/Area_2_manhattan4.ply",
+      "rooms_dir": "/home/ruoyu/Point_360/data/s3dis/Stanford3dDataset_v1.2/Area_2",
+      "rooms": ["hallway_2", "office_6", "office_7", "office_8"],
+      "pose_json": "/home/ruoyu/Point_360/data/s3dis/_area_2_manhattan4/pose.json",
+      "e2e_stage0": "/home/ruoyu/Point_360/data/full_runs/Area_2_manhattan4/stage0_localization"
+    },
+    "Area_2_manhattan7": {
+      "split": "holdout",
+      "cloud": "/home/ruoyu/Point_360/data/pointcloud/stanford/Area_2_manhattan7.ply",
+      "rooms_dir": "/home/ruoyu/Point_360/data/s3dis/Stanford3dDataset_v1.2/Area_2",
+      "rooms": ["hallway_2", "hallway_3", "office_4", "office_5", "office_6", "office_7", "office_8"],
+      "pose_json": "/home/ruoyu/Point_360/data/s3dis/_area_2_manhattan7/pose.json",
+      "e2e_stage0": "/home/ruoyu/Point_360/data/full_runs/Area_2_manhattan7/stage0_localization"
+    }
+  }
+}
