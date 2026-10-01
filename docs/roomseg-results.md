@@ -159,3 +159,57 @@ matched at IoU ≥ 0.7.
   `camera_e70395f2…_hallway_3`, which falls in seg_03 (hallway_2). The GT partition itself also puts this
   camera outside hallway_3, as it does `camera_5a7060af…_hallway_3` (which the method places inside). Neither
   is an end-to-end station.
+
+## End-to-end (bar b, criteria 2–3)
+`experiments/roomseg/two_arm.py`: Stage 0 (PanoPin seed + upright-prior FGPL, Point_360
+`run_localization.py --pose-source panopin --tau 0.10`) run fresh twice per scene with the same command.
+The only difference is `--clouds-json`: **gt** = the S3DIS room clouds, **pred** = `runs/roomseg/<scene>/clouds.json`.
+Outputs are in `runs/roomseg_e2e/<scene>/{gt,pred}/` and `two_arm.json`. Pass rule: pred room acc ≥ gt, pred translation
+median ≤ gt + 0.05 m, every e2e pano contained in its matched segment. The Area_3 Stage-0 inputs were built
+for this task (`experiments/roomseg/area3_stage0_selection.py` → Point_360 `data/full_runs/_scripts/loc_inputs.py`,
+with one station per room from the `_multiroom{4,6}/scene.json` manifests).
+
+| scene | room acc gt / pred | trans median gt / pred (m) | contained | room_acc | trans_median | containment |
+|---|---|---|---|---|---|---|
+| Area_3_manhattan4 (dev) | 1.00 / 1.00 | 1.893 / 1.893 | 4/4 | ✔ | ✔ | ✔ |
+| Area_3_manhattan6 (dev) | 1.00 / 1.00 | 1.243 / 1.111 | 6/6 | ✔ | ✔ | ✔ |
+| Area_2_manhattan4 (holdout) | 1.00 / 1.00 | 0.658 / 0.885 | 4/4 | ✔ | **✘** | ✔ |
+| Area_2_manhattan7 (holdout) | 1.00 / 1.00 | 0.053 / 0.038 | 7/7 | ✔ | ✔ | ✔ |
+
+### Area_2_manhattan4: per-pano rows (fails trans_median)
+
+| pano | room | gt label | gt err (m) | pred label | pred err (m) |
+|---|---|---|---|---|---|
+| 123cfbc1 | office_6 | office_6 | 0.045 | seg_02 | 0.041 |
+| 618991c8 | office_7 | office_7 | 0.036 | seg_03 | 0.047 |
+| eeebfd9d | office_8 | office_8 | 1.272 | seg_01 | 1.724 |
+| 12ea36aa | hallway_2 | hallway_2 | 1.869 | seg_00 | 2.200 |
+
+With 4 panos the median is the mean of the 2nd and 3rd errors, so the two FGPL failures (office_8, hallway_2)
+set it in both arms. Both arms pick every room correctly (4/4). The pred arm's errors are larger only on the
+two panos FGPL already fails in the gt arm.
+
+**Stage 0 is not reproducible run to run.** The fresh gt arm (median 0.658 m) does not reproduce the
+2026-10-01 `full_runs/Area_2_manhattan4` run (0.055 m) on the same inputs and config (the `pose_config.json`
+files differ only in their paths). There, hallway_2 was 0.019 m off; here it is 1.869 m off. The PanoPin
+seed scores (hallway_2 0.048 → 0.091) and the FGPL ICP inlier counts change between runs, even though the
+preflight reports "PanoPin determinism fix present". This run-to-run noise (> 1 m on single panos) is much
+larger than the 0.05 m margin, so the trans_median check on 4–7 panos is not a reliable test of the segments.
+
+### Other per-pano notes
+- Area_3_manhattan4: the gt and pred errors are identical per pano (hallway_1 3.257, office_3 2.850,
+  office_5 0.058, office_7 0.937 m). FGPL fails on 3 of 4 Area_3 stations whatever the clouds are.
+- Area_3_manhattan6: gt hallway_1 1.786 / office_3 2.888 / office_4 1.083 / office_5 0.060 / office_6 1.257 /
+  office_7 1.229 m; pred 1.177 / 2.811 / 1.043 / 0.065 / 1.248 / 1.045 m. FGPL again fails in both arms.
+- Area_2_manhattan7: gt office_5 2.039, hallway_2 4.244, hallway_3 4.743 m (others < 0.06); pred office_5
+  2.020, office_8 0.826, hallway_3 4.451 m (others < 0.04).
+
+### Bar (b) verdict
+- Criterion 1 (room-level segmentation, earlier sections): passes on all four scenes.
+- Criterion 2 (room accuracy no worse with predicted segments): passes on 4/4 (1.00 in every arm).
+- Criterion 3 (e2e containment): passes on 4/4. Translation median within 0.05 m: 3/4. Area_2_manhattan4 fails
+  (0.885 vs 0.658 + 0.05 m), and the failure is set by two panos FGPL already mislocates in the gt arm. Since Stage 0
+  is not reproducible run to run, this one comparison cannot separate a segment effect from run noise.
+  **Bar (b) as written is therefore not met on 1 of 4 scenes.** The user has to decide whether to accept this.
+  The fix would be to the measurement (repeat runs, or a rule restricted to the panos the gt arm localises),
+  not to the segmenter.
