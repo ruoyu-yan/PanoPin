@@ -162,7 +162,7 @@ def residuals_at_pose(cfg, pano_path, cloud_path, t, R, match_color=False, seed=
 
 
 def _load_for_residuals(cfg, pano_path, cloud_path, match_color, seed):
-    """The load half of residuals_at_pose (:160-176 before 2026-10-07): reseed, read the cloud
+    """The load half of the pre-2026-10-07 residuals_at_pose body: reseed, read the cloud
     (identical subsample to the caller's own read), read + resize the panorama."""
     from utils import cloud2idx, refine_sampling_coords, sample_from_img  # noqa: F401 (import check)
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -189,7 +189,8 @@ def _load_for_residuals(cfg, pano_path, cloud_path, match_color, seed):
 
 
 def _residuals_at(cfg, img, xyz, rgb, device, t, R):
-    """The per-pose half (:178-197 before 2026-10-07): sampling_loss.py:189-203 without the mean.
+    """The per-pose half of the pre-2026-10-07 residuals_at_pose body: sampling_loss.py:189-203
+    without the mean.
     Draws no randomness, so one reseed + load in _load_for_residuals serves every pose."""
     from utils import cloud2idx, refine_sampling_coords, sample_from_img
     t_col = torch.as_tensor(np.asarray(t, dtype=np.float32), device=device).reshape(3, 1)
@@ -214,7 +215,9 @@ def residuals_at_poses(cfg, pano_path, cloud_path, poses, match_color=False, see
     """residuals_at_pose for several (t, R) at once: the cloud and the panorama are loaded ONCE
     (same reseed, same subsample, same resize), then the per-pose geometry runs per pose on
     the same tensors. Element i equals residuals_at_pose(cfg, pano_path, cloud_path, *poses[i],
-    match_color=match_color, seed=seed) exactly (tests/test_cpo_adapter.py). The arbitration
+    match_color=match_color, seed=seed) exactly under a deterministic torch thread setting
+    (tests pin torch.set_num_threads(1); multi-threaded scatter ops may differ in the last bits)
+    (tests/test_cpo_adapter.py). The arbitration
     scores 10-20 candidates per panorama; reloading a 1 M-point cloud per candidate is what
     this avoids."""
     if not poses:

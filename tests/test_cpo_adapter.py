@@ -70,15 +70,30 @@ def test_residuals_at_poses_matches_residuals_at_pose_without_subsampling(tmp_pa
         assert np.array_equal(r, residuals_at_pose(cfg, pano, cloud, t, R))
 
 
-def test_residuals_at_poses_matches_under_subsampling(tmp_path):
+@pytest.mark.parametrize("match_color", [False, True])
+@pytest.mark.parametrize("seed", [0, 3])
+def test_residuals_at_poses_matches_under_subsampling(tmp_path, match_color, seed):
     from panopin.cpo_config import load_cfg, TIER2
     from panopin.cpo_adapter import residuals_at_pose, residuals_at_poses
     pano, cloud = _prep(tmp_path, walls={'x1': [220, 40, 40]}, pose_trans=[2.0, 2.0, 1.5])
     cfg = load_cfg(**TIER2, sample_rate=5)          # read_txt_pcd draws a random subsample
     poses = [([2.0, 2.0, 1.5], np.eye(3)), ([1.0, 2.5, 1.5], _yaw(90))]
-    batch = residuals_at_poses(cfg, pano, cloud, poses, seed=0)
+    batch = residuals_at_poses(cfg, pano, cloud, poses, match_color=match_color, seed=seed)
     for (t, R), r in zip(poses, batch):
-        assert np.array_equal(r, residuals_at_pose(cfg, pano, cloud, t, R, seed=0))
+        assert np.array_equal(r, residuals_at_pose(cfg, pano, cloud, t, R,
+                                                   match_color=match_color, seed=seed))
+
+
+def test_residuals_at_pose_golden_regression(tmp_path):
+    # Golden values recorded on 2026-10-07 at commit 74af67c (torch.set_num_threads(1), as
+    # conftest pins), so a future edit to _residuals_at / _load_for_residuals is visible.
+    from panopin.cpo_config import load_cfg, TIER2
+    from panopin.cpo_adapter import residuals_at_pose
+    pano, cloud = _prep(tmp_path, walls={'x1': [220, 40, 40]}, pose_trans=[2.0, 2.0, 1.5])
+    res = residuals_at_pose(load_cfg(**TIER2, sample_rate=5), pano, cloud,
+                            [1.0, 2.5, 1.5], _yaw(90), seed=0)
+    assert len(res) == 3063
+    assert np.isclose(np.quantile(res, 0.2), 0.4169709086418152, rtol=1e-6, atol=0.0)
 
 
 def test_residuals_at_poses_empty_list(tmp_path):
