@@ -51,3 +51,38 @@ def test_matching_cloud_scores_lower_than_mismatched(tmp_path):
     _, _, loss_match = localize_pair(cfg, pano, match_cloud)
     _, _, loss_mis = localize_pair(cfg, pano, mis_cloud)
     assert loss_match < loss_mis   # spatial layout discriminates even under global color matching
+
+
+def _yaw(deg):
+    c, s = np.cos(np.radians(deg)), np.sin(np.radians(deg))
+    return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+
+
+def test_residuals_at_poses_matches_residuals_at_pose_without_subsampling(tmp_path):
+    from panopin.cpo_config import load_cfg, TIER2
+    from panopin.cpo_adapter import residuals_at_pose, residuals_at_poses
+    pano, cloud = _prep(tmp_path, walls={'x1': [220, 40, 40]}, pose_trans=[2.0, 2.0, 1.5])
+    cfg = load_cfg(**TIER2, sample_rate=1)
+    poses = [([2.0, 2.0, 1.5], np.eye(3)), ([1.0, 2.5, 1.5], _yaw(90)), ([2.0, 2.0, 1.5], _yaw(180))]
+    batch = residuals_at_poses(cfg, pano, cloud, poses)
+    assert len(batch) == 3
+    for (t, R), r in zip(poses, batch):
+        assert np.array_equal(r, residuals_at_pose(cfg, pano, cloud, t, R))
+
+
+def test_residuals_at_poses_matches_under_subsampling(tmp_path):
+    from panopin.cpo_config import load_cfg, TIER2
+    from panopin.cpo_adapter import residuals_at_pose, residuals_at_poses
+    pano, cloud = _prep(tmp_path, walls={'x1': [220, 40, 40]}, pose_trans=[2.0, 2.0, 1.5])
+    cfg = load_cfg(**TIER2, sample_rate=5)          # read_txt_pcd draws a random subsample
+    poses = [([2.0, 2.0, 1.5], np.eye(3)), ([1.0, 2.5, 1.5], _yaw(90))]
+    batch = residuals_at_poses(cfg, pano, cloud, poses, seed=0)
+    for (t, R), r in zip(poses, batch):
+        assert np.array_equal(r, residuals_at_pose(cfg, pano, cloud, t, R, seed=0))
+
+
+def test_residuals_at_poses_empty_list(tmp_path):
+    from panopin.cpo_config import load_cfg, TIER2
+    from panopin.cpo_adapter import residuals_at_poses
+    pano, cloud = _prep(tmp_path, walls={'x1': [220, 40, 40]}, pose_trans=[2.0, 2.0, 1.5])
+    assert residuals_at_poses(load_cfg(**TIER2, sample_rate=1), pano, cloud, []) == []

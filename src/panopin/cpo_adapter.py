@@ -157,7 +157,14 @@ def residuals_at_pose(cfg, pano_path, cloud_path, t, R, match_color=False, seed=
     to the same state first. Reseeding to determinism.pin()'s default seed immediately before
     the read reproduces the caller's exact subsample (verified: array_equal == True) and
     closed the gap to |diff|=0.00e+00."""
-    from utils import cloud2idx, refine_sampling_coords, sample_from_img
+    img, xyz, rgb, device = _load_for_residuals(cfg, pano_path, cloud_path, match_color, seed)
+    return _residuals_at(cfg, img, xyz, rgb, device, t, R)
+
+
+def _load_for_residuals(cfg, pano_path, cloud_path, match_color, seed):
+    """The load half of residuals_at_pose (:160-176 before 2026-10-07): reseed, read the cloud
+    (identical subsample to the caller's own read), read + resize the panorama."""
+    from utils import cloud2idx, refine_sampling_coords, sample_from_img  # noqa: F401 (import check)
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     sample_rate = getattr(cfg, 'sample_rate', 1)
 
@@ -178,7 +185,13 @@ def residuals_at_pose(cfg, pano_path, cloud_path, t, R, match_color=False, seed=
     mdh = getattr(cfg, 'main_downsample_h', 1); mdw = getattr(cfg, 'main_downsample_w', 1)
     img = cv2.resize(orig_img, (orig_img.shape[1] // mdw, orig_img.shape[0] // mdh))
     img = (torch.from_numpy(img).float() / 255.).to(device)
+    return img, xyz, rgb, device
 
+
+def _residuals_at(cfg, img, xyz, rgb, device, t, R):
+    """The per-pose half (:178-197 before 2026-10-07): sampling_loss.py:189-203 without the mean.
+    Draws no randomness, so one reseed + load in _load_for_residuals serves every pose."""
+    from utils import cloud2idx, refine_sampling_coords, sample_from_img
     t_col = torch.as_tensor(np.asarray(t, dtype=np.float32), device=device).reshape(3, 1)
     R_t = torch.as_tensor(np.asarray(R, dtype=np.float32), device=device).reshape(3, 3)
 
@@ -195,3 +208,16 @@ def residuals_at_pose(cfg, pano_path, cloud_path, t, R, match_color=False, seed=
     mask = torch.sum(sample_rgb == 0, dim=1) != 3
     residuals = torch.norm(sample_rgb[mask] - refined_rgb[mask], dim=-1)
     return residuals.detach().cpu().numpy()
+
+
+def residuals_at_poses(cfg, pano_path, cloud_path, poses, match_color=False, seed=0):
+    """residuals_at_pose for several (t, R) at once: the cloud and the panorama are loaded ONCE
+    (same reseed, same subsample, same resize), then the per-pose geometry runs per pose on
+    the same tensors. Element i equals residuals_at_pose(cfg, pano_path, cloud_path, *poses[i],
+    match_color=match_color, seed=seed) exactly (tests/test_cpo_adapter.py). The arbitration
+    scores 10-20 candidates per panorama; reloading a 1 M-point cloud per candidate is what
+    this avoids."""
+    if not poses:
+        return []
+    img, xyz, rgb, device = _load_for_residuals(cfg, pano_path, cloud_path, match_color, seed)
+    return [_residuals_at(cfg, img, xyz, rgb, device, t, R) for t, R in poses]
