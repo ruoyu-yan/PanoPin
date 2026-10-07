@@ -157,16 +157,41 @@ def test_joint_assignment_separates_tied_corridor_panos_and_tags_them():
     assert by["h2"]["score"] == 0.084
 
 
-def test_surplus_pano_keeps_the_argmin_gate():
+def test_more_panos_than_rooms_uses_the_legacy_rule_for_all():
     scores = {"g1": {"A": 0.06, "B": 0.30}, "g2": {"A": 0.30, "B": 0.07},
               "x": {"A": 0.08, "B": 0.20}}                 # third pano, two rooms
     poses = _poses({("g1", "A"): [1, 0, 0], ("g2", "B"): [2, 0, 0], ("x", "A"): [3, 0, 0]})
     matches, admitted = build_matches(scores, poses, ["A", "B"], _ID, tau=0.10)
     by = {m["pano_name"]: m for m in matches}
     assert sorted(admitted) == ["g1", "g2", "x"]
-    assert by["x"]["room_label"] == "A" and by["x"]["assignment"] == "argmin"
-    assert by["g1"]["assignment"] == "joint"
+    assert by["g1"]["room_label"] == "A" and by["g2"]["room_label"] == "B"
+    assert by["x"]["room_label"] == "A"
+    assert all(m["assignment"] == "argmin" for m in matches)
     assert len(admitted) == len(set(admitted))
+
+
+def test_a_confident_pano_is_never_forced_into_an_empty_room():
+    # Z is a segment with no genuine pano. A one-to-one assignment would move a1 into Z.
+    scores = {"a1": {"A": 0.06, "B": 0.40, "Z": 0.20}, "a2": {"A": 0.07, "B": 0.40, "Z": 0.30},
+              "b1": {"A": 0.40, "B": 0.06, "Z": 0.25}, "w": {"A": 0.15, "B": 0.16, "Z": 0.30}}
+    poses = _poses({("a1", "A"): [1, 0, 0], ("a2", "A"): [2, 0, 0],
+                    ("b1", "B"): [3, 0, 0], ("w", "Z"): [4, 0, 0]})
+    matches, admitted = build_matches(scores, poses, ["A", "B", "Z"], _ID, tau=0.10)
+    by = {m["pano_name"]: m for m in matches}
+    assert sorted(admitted) == ["a1", "a2", "b1", "w"]
+    assert by["a1"]["room_label"] == "A" and by["a2"]["room_label"] == "A"
+    assert by["b1"]["room_label"] == "B" and by["w"]["room_label"] == "Z"   # backstop
+    assert not any(m["assignment"] == "joint" for m in matches)
+
+
+def test_joint_pair_is_admitted_even_above_tau():
+    scores = {"p": {"A": 0.05, "B": 0.50}, "q": {"A": 0.60, "B": 0.40}}   # q only covers B
+    poses = _poses({("p", "A"): [1, 0, 0], ("q", "B"): [2, 0, 0]})
+    matches, admitted = build_matches(scores, poses, ["A", "B"], _ID, tau=0.10)
+    by = {m["pano_name"]: m for m in matches}
+    assert sorted(admitted) == ["p", "q"]
+    assert by["q"]["room_label"] == "B" and by["q"]["score"] == 0.40
+    assert by["q"]["assignment"] == "joint" and by["p"]["assignment"] == "joint"
 
 
 def test_legacy_gate_without_coverage_is_per_pano():

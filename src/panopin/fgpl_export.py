@@ -36,27 +36,42 @@ def raw_t_to_camera_position(t_raw, R_meta, tol=1e-6):
 
 
 def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_coverage=True):
-    """Joint assignment + per-pano gate for the surplus -> (matches, admitted_pano_names).
+    """Joint assignment (panos <= rooms) or the legacy per-pano gate -> (matches, admitted).
 
-    guarantee_coverage=True (the CLI): panos and rooms are matched one-to-one by
-    `coverage.assign_rooms` (minimum total score) and those pairs are admitted unconditionally —
-    they are what covers the rooms. Panos left over (more panos than rooms) keep the per-pano
-    rule: argmin room iff its score <= tau, else omitted; a room may then hold several panos.
-    Rooms left over (more rooms than panos) stay unseeded.
+    Joint (guarantee_coverage=True and len(score_matrix) <= len(room_order), the CLI's usual
+    case): panos and rooms are matched one-to-one by `coverage.assign_rooms` (minimum total
+    score); every pano is in that assignment and admitted unconditionally, even above tau.
+    Rooms left over stay unseeded. Tagged "assignment": "joint".
 
-    guarantee_coverage=False: the legacy per-pano gate only (argmin iff score <= tau).
+    Legacy (panos outnumber rooms, or guarantee_coverage=False): admit each pano at its argmin
+    room iff its score <= tau; with guarantee_coverage, any room with no admitted pano is then
+    seeded by its best UNASSIGNED pano. Tagged "assignment": "argmin". The joint rule is not
+    used here because with several panos per room a one-to-one assignment forces a confident
+    pano out of its room into a pano-less segment.
 
-    Each pano appears at most once. Each record says which rule placed it
-    ("assignment": "joint" | "argmin")."""
+    Each pano appears at most once. Records are emitted in score-matrix order."""
     if not score_matrix:
         return [], []
-    assigned, basis = {}, {}
-    if guarantee_coverage:
-        for pano, room in coverage.assign_rooms(score_matrix, room_order).items():
-            assigned[pano], basis[pano] = room, "joint"
-    for pano, (room, neg_score) in coverage.pano_confidence(score_matrix).items():
-        if pano not in assigned and -neg_score <= tau:
-            assigned[pano], basis[pano] = room, "argmin"
+    assigned = {}   # pano -> room, at most one room per pano
+    if guarantee_coverage and len(score_matrix) <= len(room_order):
+        assigned = coverage.assign_rooms(score_matrix, room_order)
+        basis = "joint"
+    else:
+        basis = "argmin"
+        for pano, (room, neg_score) in coverage.pano_confidence(score_matrix).items():
+            if -neg_score <= tau:
+                assigned[pano] = room
+        covered = set(assigned.values())
+        if guarantee_coverage:
+            for room in room_order:
+                if room in covered:
+                    continue
+                free = [p for p in score_matrix if p not in assigned]
+                if not free:
+                    continue  # cannot cover without a duplicate emission; leave uncovered
+                best = min(free, key=lambda p: score_matrix[p][room])
+                assigned[best] = room
+                covered.add(room)
     matches = []
     for pano in score_matrix:              # matrix order: deterministic, independent of the solver
         if pano not in assigned:
@@ -71,7 +86,7 @@ def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_c
             "score": float(score_matrix[pano][room]),
             "rotation_deg": 0.0,
             "camera_position": cam,
-            "assignment": basis[pano],
+            "assignment": basis,
         })
     admitted_pano_names = [m["pano_name"] for m in matches]
     return matches, admitted_pano_names
@@ -80,7 +95,8 @@ def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_c
 def write_alignment_json(matches, admitted_pano_names, out_path, extra_meta=None):
     """Serialize the exact demo6_alignment.json schema FGPL reads (align_polygons_demo6.py)."""
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-    meta = {"pipeline": "PanoPin color seed (gated per-pano)",
+    meta = {"pipeline": ("PanoPin color seed (joint one-pano-per-room assignment; "
+                         "per-pano gate when panos outnumber rooms)"),
             "pano_names": list(admitted_pano_names),
             "source": "fgpl_export"}
     if extra_meta:
