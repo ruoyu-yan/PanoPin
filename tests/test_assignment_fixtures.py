@@ -33,12 +33,17 @@ def test_at_least_three_draws_are_recorded():
     assert len(FIXTURES) >= 3, "run eval/record_score_matrix.py three times (Task 3 of the plan)"
 
 
+def test_known_failing_draws_are_present():
+    assert FAILED_FIXTURES, "fixtures/score_matrix_failed/ is empty; the known-failing draw is evidence"
+
+
 @pytest.mark.parametrize("path", FAILED_FIXTURES, ids=[p.stem for p in FAILED_FIXTURES])
 def test_known_failing_draw_is_still_failing(path):
     """A recorded draw on which the joint assignment misplaces panos, kept as evidence. On it
-    both corridor panos score better in each other's corridor, so no rule on the score matrix
-    alone can separate them (spec section 12). When a later change makes this test fail, the
-    fixture is placed correctly now and should move back to fixtures/score_matrix/."""
+    both corridor panos score lower in each other's corridor, so the joint min-sum assignment
+    cannot place both corridors: the swap has the lower total (0.1837 vs 0.1935). When a later
+    change makes this test fail, the fixture is placed correctly now and should move back to
+    fixtures/score_matrix/."""
     d = json.loads(path.read_text())
     assigned = coverage.assign_rooms(d["score_matrix"], d["room_order"])
     wrong = {p: (r, d["truth_segment"][p]) for p, r in assigned.items() if r != d["truth_segment"][p]}

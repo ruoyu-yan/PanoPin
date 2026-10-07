@@ -55,7 +55,9 @@ def assign_rooms(score_matrix, room_order):
     Why not per-pano argmin: two corridors score within a few percent of each other for BOTH
     corridor panos, so argmin seeds both in the same corridor, and FGPL then searches the wrong
     corridor and never leaves it (Area_2_manhattan7, 2026-10-05: hallway_2 11 m off). On the
-    three score matrices measured on 2026-10-06 argmin placed 6 of 7 panos, this 7 of 7."""
+    four score matrices recorded on 2026-10-07 (tests/fixtures/score_matrix*/) argmin placed 4-6
+    of 7 panos, and this placed 7 of 7 on three draws; on the fourth both corridor panos score
+    lower in each other's corridor and this swaps them (kept as a failing fixture)."""
     if not score_matrix:
         return {}
     from scipy.optimize import linear_sum_assignment
