@@ -15,6 +15,7 @@ Input is a per-room score matrix {pano: {room: score}} (lower = better), e.g. fr
 `robust_score.low_percentile_scores`. Fair: reads only scores, no GT (D5). Caveat: validated at
 n=12; a larger-pano GPU run should confirm.
 """
+import numpy as np
 
 
 def room_anchored_seeds(score_matrix):
@@ -43,3 +44,23 @@ def pano_confidence(score_matrix):
         room = min(sc, key=lambda r: sc[r])
         out[p] = (room, -sc[room])
     return out
+
+
+def assign_rooms(score_matrix, room_order):
+    """{pano: {room: score}} x room_order -> {pano: room}: the one-to-one assignment of panos
+    to rooms with the smallest total score (Hungarian method, scipy). With more panos than
+    rooms every room gets exactly one pano and the rest are absent from the result; with more
+    rooms than panos every pano gets a room and some rooms are absent. Threshold-free.
+
+    Why not per-pano argmin: two corridors score within a few percent of each other for BOTH
+    corridor panos, so argmin seeds both in the same corridor, and FGPL then searches the wrong
+    corridor and never leaves it (Area_2_manhattan7, 2026-10-05: hallway_2 11 m off). On the
+    three score matrices measured on 2026-10-06 argmin placed 6 of 7 panos, this 7 of 7."""
+    if not score_matrix:
+        return {}
+    from scipy.optimize import linear_sum_assignment
+    panos = list(score_matrix)
+    rooms = list(room_order)
+    cost = np.array([[float(score_matrix[p][r]) for r in rooms] for p in panos])
+    rows, cols = linear_sum_assignment(cost)
+    return {panos[i]: rooms[j] for i, j in zip(rows, cols)}

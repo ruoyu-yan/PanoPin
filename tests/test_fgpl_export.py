@@ -98,7 +98,7 @@ def test_match_schema_and_room_idx():
     matches, _ = build_matches(scores, poses, ["A", "B"], _ID, tau=0.10)
     for m in matches:
         assert set(m) == {"pano_name", "room_idx", "room_label", "score",
-                          "rotation_deg", "camera_position"}
+                          "rotation_deg", "camera_position", "assignment"}
         assert m["room_idx"] == ["A", "B"].index(m["room_label"])
         assert m["rotation_deg"] == 0.0
         assert len(m["camera_position"]) == 2
@@ -142,3 +142,35 @@ def test_export_alignment_end_to_end(tmp_path):
     assert d["metadata"]["pano_names"] == admitted
     assert d["metadata"]["tau"] == 0.10
     assert len(d["matches"]) == 2
+
+
+def test_joint_assignment_separates_tied_corridor_panos_and_tags_them():
+    scores = {"h2": {"c0": 0.082, "c3": 0.084}, "h3": {"c0": 0.083, "c3": 0.095}}
+    poses = _poses({("h2", "c0"): [1, 0, 0], ("h2", "c3"): [2, 0, 0],
+                    ("h3", "c0"): [3, 0, 0], ("h3", "c3"): [4, 0, 0]})
+    matches, admitted = build_matches(scores, poses, ["c0", "c3"], _ID, tau=0.10)
+    by = {m["pano_name"]: m for m in matches}
+    assert sorted(admitted) == ["h2", "h3"]
+    assert by["h2"]["room_label"] == "c3" and by["h3"]["room_label"] == "c0"
+    assert by["h2"]["assignment"] == "joint" and by["h3"]["assignment"] == "joint"
+    assert by["h2"]["camera_position"] == [2.0, 0.0]     # the pose of the ASSIGNED room
+    assert by["h2"]["score"] == 0.084
+
+
+def test_surplus_pano_keeps_the_argmin_gate():
+    scores = {"g1": {"A": 0.06, "B": 0.30}, "g2": {"A": 0.30, "B": 0.07},
+              "x": {"A": 0.08, "B": 0.20}}                 # third pano, two rooms
+    poses = _poses({("g1", "A"): [1, 0, 0], ("g2", "B"): [2, 0, 0], ("x", "A"): [3, 0, 0]})
+    matches, admitted = build_matches(scores, poses, ["A", "B"], _ID, tau=0.10)
+    by = {m["pano_name"]: m for m in matches}
+    assert sorted(admitted) == ["g1", "g2", "x"]
+    assert by["x"]["room_label"] == "A" and by["x"]["assignment"] == "argmin"
+    assert by["g1"]["assignment"] == "joint"
+    assert len(admitted) == len(set(admitted))
+
+
+def test_legacy_gate_without_coverage_is_per_pano():
+    scores = {"g1": {"A": 0.06, "B": 0.30}, "w": {"A": 0.40, "B": 0.15}}
+    poses = _poses({("g1", "A"): [1, 0, 0], ("w", "B"): [5, 0, 0]})
+    matches, admitted = build_matches(scores, poses, ["A", "B"], _ID, guarantee_coverage=False)
+    assert admitted == ["g1"] and matches[0]["assignment"] == "argmin"

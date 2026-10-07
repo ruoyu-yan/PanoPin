@@ -45,3 +45,39 @@ def test_pano_confidence_ranks_weak_lock_last():
 def test_empty_matrix():
     assert coverage.room_anchored_seeds({}) == {}
     assert coverage.pano_confidence({}) == {}
+
+
+# Two corridor panos whose scores nearly tie across the two corridors — the Area_2_manhattan7
+# pattern measured on 2026-10-06. Per-pano argmin sends BOTH to seg_00; the joint assignment
+# separates them because p_h2->seg_03 + p_h3->seg_00 (0.167) beats the swap (0.177).
+CORRIDORS = {
+    "p_h2": {"seg_00": 0.082, "seg_03": 0.084, "seg_02": 0.30},
+    "p_h3": {"seg_00": 0.083, "seg_03": 0.095, "seg_02": 0.31},
+    "p_o4": {"seg_00": 0.25,  "seg_03": 0.26,  "seg_02": 0.055},
+}
+
+
+def test_assign_rooms_separates_tied_corridor_panos():
+    assert coverage.pano_confidence(CORRIDORS)["p_h2"][0] == "seg_00"   # argmin: both ...
+    assert coverage.pano_confidence(CORRIDORS)["p_h3"][0] == "seg_00"   # ... in seg_00
+    a = coverage.assign_rooms(CORRIDORS, ["seg_00", "seg_02", "seg_03"])
+    assert a == {"p_h2": "seg_03", "p_h3": "seg_00", "p_o4": "seg_02"}
+
+
+def test_assign_rooms_surplus_panos_are_left_out():
+    sm = {"a": {"X": 0.05, "Y": 0.40}, "b": {"X": 0.42, "Y": 0.06}, "c": {"X": 0.30, "Y": 0.35}}
+    assert coverage.assign_rooms(sm, ["X", "Y"]) == {"a": "X", "b": "Y"}
+
+
+def test_assign_rooms_more_rooms_than_panos_leaves_rooms_unassigned():
+    sm = {"a": {"X": 0.05, "Y": 0.40, "Z": 0.50}}
+    assert coverage.assign_rooms(sm, ["X", "Y", "Z"]) == {"a": "X"}
+
+
+def test_assign_rooms_empty():
+    assert coverage.assign_rooms({}, ["X"]) == {}
+
+
+def test_assign_rooms_never_uses_a_room_twice():
+    a = coverage.assign_rooms(SM, ["hallway_3", "office_4", "office_5"])
+    assert len(set(a.values())) == len(a) == 3
