@@ -28,8 +28,14 @@ def select(candidates_doc, scores):
         raise ValueError(f"{candidates_doc.get('pano')}: no candidates to choose from")
     if len(cands) != len(scores):
         raise ValueError(f"{candidates_doc.get('pano')}: {len(cands)} candidates but {len(scores)} scores")
-    best = min(range(len(scores)), key=lambda i: (scores[i], i))
+    pano = candidates_doc.get("pano")
+    for pos, c in enumerate(cands):
+        if int(c["index"]) != pos:
+            raise ValueError(f"{pano}: candidate at position {pos} has index {c['index']}")
     j = int(candidates_doc["fgpl_choice"])
+    if not 0 <= j < len(cands):
+        raise ValueError(f"{pano}: fgpl_choice {j} outside {len(cands)} candidates")
+    best = min(range(len(scores)), key=lambda i: (scores[i], i))
     return {"R": cands[best]["R"], "t": cands[best]["t"], "index": int(cands[best]["index"]),
             "origin": cands[best]["origin"], "score": float(scores[best]),
             "fgpl_choice": {"index": j, "score": float(scores[j])},

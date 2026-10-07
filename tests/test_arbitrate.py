@@ -80,3 +80,36 @@ def test_arbitrate_fails_loud_on_a_missing_room_cloud_or_candidates_file(tmp_pat
     (cdir / "pB" / "candidates.json").unlink()
     with pytest.raises(FileNotFoundError):
         arb.arbitrate(pano_paths, cloud_paths, alignment, cdir, lambda *a: [0.1, 0.2, 0.3])
+
+
+def test_select_refuses_an_fgpl_choice_outside_the_candidates():
+    doc = _doc(3, choice=3)
+    doc["pano"] = "pX"
+    with pytest.raises(ValueError, match="pX"):
+        arb.select(doc, [0.1, 0.2, 0.3])
+
+
+def test_select_refuses_a_candidate_index_that_is_not_its_position():
+    doc = _doc(3)
+    doc["pano"] = "pY"
+    doc["candidates"][1]["index"] = 2
+    with pytest.raises(ValueError, match=r"pY.*position 1"):
+        arb.select(doc, [0.1, 0.2, 0.3])
+
+
+def test_gpu_scorer_forwards_poses_once_and_scores_the_low_percentile(monkeypatch):
+    from panopin import cpo_adapter, robust_score
+    res = [np.linspace(0, 1, 11), np.linspace(2, 3, 21)]
+    calls = []
+
+    def fake(cfg, pano_path, cloud_path, poses, **kw):
+        calls.append((cfg, pano_path, cloud_path, poses))
+        return [r.copy() for r in res]
+
+    monkeypatch.setattr(cpo_adapter, "residuals_at_poses", fake)
+    poses = [([0.0, 0.0, 1.5], _ID), ([5.0, 0.0, 1.5], _ID)]
+    cfg = object()
+    out = arb.gpu_scorer(cfg)("fake.png", "fake.txt", poses)
+    assert len(calls) == 1
+    assert calls[0] == (cfg, "fake.png", "fake.txt", poses)
+    assert out == [float(np.percentile(r, robust_score.DEPLOY_Q)) for r in res]
