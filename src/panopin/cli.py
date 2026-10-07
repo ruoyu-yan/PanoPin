@@ -15,13 +15,21 @@ from panopin import fgpl_export, seed
 
 def segment_shapes(candidate_clouds, stride=10):
     """{room: cloud_path} -> {room: SegmentShape}, from every stride-th point of each cloud.
-    Corridor segments get their FGPL seed at this centroid (fgpl_export.build_matches)."""
+    Corridor segments get their FGPL seed at this centroid (fgpl_export.build_matches).
+
+    A cloud too sparse for the stride is measured on all its points; one with fewer than 3
+    points is left out (named on stderr), so its panos seed from CPO instead of aborting."""
     from panopin.roomseg.files import read_cloud
     from panopin.roomseg.shape import segment_shape
     out = {}
     for room, path in candidate_clouds.items():
         xyz, _rgb = read_cloud(path)
-        out[room] = segment_shape(xyz[::stride])
+        pts = xyz[::stride] if len(xyz[::stride]) >= 3 else xyz
+        if len(pts) < 3:
+            print(f"segment_shapes: {room} has {len(pts)} points, too few to measure; "
+                  f"its panos seed from CPO", file=sys.stderr)
+            continue
+        out[room] = segment_shape(pts)
     return out
 
 

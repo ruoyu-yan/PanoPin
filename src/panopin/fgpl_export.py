@@ -11,6 +11,7 @@ FGPL's aligned-frame camera_position. Fair: reads only scores/poses/metadata, ne
 Deployment contract: the caller MUST set FGPL cfg["pano_names"] = the returned admitted list
 (an unseeded name in pano_names -> KeyError in FGPL's loader)."""
 import json
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -53,7 +54,10 @@ def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_c
 
     shapes {room: roomseg.shape.SegmentShape} (optional): a pano whose room is a corridor
     (is_corridor) is seeded at the room's plan centroid instead of its CPO position; records
-    carry "seed_basis" and "extent_ratio".
+    carry "seed_basis" and "extent_ratio". Only a corridor holding exactly ONE admitted pano
+    moves: when two or more share it (legacy branch), each keeps its CPO position, because
+    identical seeds would make FGPL's Voronoi cells degenerate and the arbitration could not
+    tell those panos apart (the 0.9 m centroid figure was measured with one pano per corridor).
 
     Each pano appears at most once. Records are emitted in score-matrix order."""
     if not score_matrix:
@@ -78,6 +82,7 @@ def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_c
                 best = min(free, key=lambda p: score_matrix[p][room])
                 assigned[best] = room
                 covered.add(room)
+    panos_in_room = Counter(assigned.values())
     matches = []
     for pano in score_matrix:              # matrix order: deterministic, independent of the solver
         if pano not in assigned:
@@ -87,7 +92,7 @@ def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_c
         seed_basis, ratio = "cpo", None
         if shapes is not None and room in shapes:
             ratio = float(shapes[room].extent_ratio)
-            if shape_mod.is_corridor(shapes[room]):
+            if shape_mod.is_corridor(shapes[room]) and panos_in_room[room] == 1:
                 cx, cy = shapes[room].centroid_xy
                 t = [cx, cy, float(t[2])]
                 seed_basis = "centroid"

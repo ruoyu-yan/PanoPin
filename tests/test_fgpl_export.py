@@ -219,3 +219,40 @@ def test_without_shapes_every_seed_is_cpo():
     poses = _poses({("g1", "A"): [1, 2, 0], ("g2", "B"): [3, 4, 0]})
     matches, _ = build_matches(scores, poses, ["A", "B"], _ID)
     assert all(m["seed_basis"] == "cpo" and m["extent_ratio"] is None for m in matches)
+
+
+def test_shapes_apply_in_the_legacy_branch_only_to_a_single_pano_corridor():
+    from panopin.roomseg.shape import SegmentShape
+    shapes = {"corr": SegmentShape((5.0, 20.5), 5.1, 1000), "off": SegmentShape((1.3, 2.2), 1.2, 1000)}
+    # Two panos share the corridor (3 panos > 2 rooms -> legacy branch): both keep their CPO seeds.
+    scores = {"h1": {"corr": 0.05, "off": 0.30}, "h2": {"corr": 0.06, "off": 0.30},
+              "o": {"corr": 0.30, "off": 0.05}}
+    poses = _poses({("h1", "corr"): [9.0, 20.0, 1.5], ("h2", "corr"): [2.0, 21.0, 1.5],
+                    ("o", "off"): [1.0, 2.0, 1.4]})
+    matches, _ = build_matches(scores, poses, ["corr", "off"], _ID, shapes=shapes)
+    by = {m["pano_name"]: m for m in matches}
+    assert all(m["assignment"] == "argmin" for m in matches)
+    assert by["h1"]["camera_position"] == [9.0, 20.0] and by["h2"]["camera_position"] == [2.0, 21.0]
+    for p in ("h1", "h2"):
+        assert by[p]["seed_basis"] == "cpo" and by[p]["extent_ratio"] == 5.1
+    # One pano in the corridor, two in the office (still legacy): the corridor pano moves.
+    scores = {"h": {"corr": 0.05, "off": 0.30}, "o1": {"corr": 0.30, "off": 0.05},
+              "o2": {"corr": 0.30, "off": 0.06}}
+    poses = _poses({("h", "corr"): [9.0, 20.0, 1.5], ("o1", "off"): [1.0, 2.0, 1.4],
+                    ("o2", "off"): [2.0, 3.0, 1.4]})
+    matches, _ = build_matches(scores, poses, ["corr", "off"], _ID, shapes=shapes)
+    by = {m["pano_name"]: m for m in matches}
+    assert all(m["assignment"] == "argmin" for m in matches)
+    assert by["h"]["camera_position"] == [5.0, 20.5] and by["h"]["seed_basis"] == "centroid"
+    assert by["o1"]["camera_position"] == [1.0, 2.0] and by["o1"]["seed_basis"] == "cpo"
+
+
+def test_room_missing_from_shapes_seeds_from_cpo():
+    from panopin.roomseg.shape import SegmentShape
+    scores = {"h": {"corr": 0.08, "off": 0.30}, "o": {"corr": 0.30, "off": 0.06}}
+    poses = _poses({("h", "corr"): [9.0, 20.0, 1.5], ("o", "off"): [1.0, 2.0, 1.4]})
+    shapes = {"off": SegmentShape((1.3, 2.2), 1.2, 1000)}
+    matches, _ = build_matches(scores, poses, ["corr", "off"], _ID, shapes=shapes)
+    by = {m["pano_name"]: m for m in matches}
+    assert by["h"]["camera_position"] == [9.0, 20.0]
+    assert by["h"]["seed_basis"] == "cpo" and by["h"]["extent_ratio"] is None

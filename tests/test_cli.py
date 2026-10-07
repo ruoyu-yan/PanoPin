@@ -127,3 +127,12 @@ def test_seed_from_cached_passes_shapes_through(tmp_path):
     cli.seed_from_cached(scores, poses, ["corr", "off"], meta, out, tau=0.10, shapes=shapes)
     by = {m["pano_name"]: m for m in json.loads(out.read_text())["matches"]}
     assert by["h"]["camera_position"] == [5.0, 20.5] and by["h"]["seed_basis"] == "centroid"
+
+
+def test_segment_shapes_skips_a_segment_too_small_to_measure(tmp_path, capsys):
+    from panopin import cli
+    clouds = {"tiny": str(_cloud_txt(tmp_path / "tiny.txt", 1.0, 1.0, 0.0, 0.0, n=2)),
+              "off": str(_cloud_txt(tmp_path / "off.txt", 4.0, 4.0, 1.0, 2.0))}
+    shapes = cli.segment_shapes(clouds)
+    assert set(shapes) == {"off"}
+    assert "tiny" in capsys.readouterr().err
