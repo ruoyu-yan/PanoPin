@@ -97,8 +97,8 @@ def test_match_schema_and_room_idx():
     poses = _poses({("g1", "A"): [1, 2, 0], ("g2", "B"): [3, 4, 0]})
     matches, _ = build_matches(scores, poses, ["A", "B"], _ID, tau=0.10)
     for m in matches:
-        assert set(m) == {"pano_name", "room_idx", "room_label", "score",
-                          "rotation_deg", "camera_position", "assignment"}
+        assert set(m) == {"pano_name", "room_idx", "room_label", "score", "rotation_deg",
+                          "camera_position", "assignment", "seed_basis", "extent_ratio"}
         assert m["room_idx"] == ["A", "B"].index(m["room_label"])
         assert m["rotation_deg"] == 0.0
         assert len(m["camera_position"]) == 2
@@ -199,3 +199,23 @@ def test_legacy_gate_without_coverage_is_per_pano():
     poses = _poses({("g1", "A"): [1, 0, 0], ("w", "B"): [5, 0, 0]})
     matches, admitted = build_matches(scores, poses, ["A", "B"], _ID, guarantee_coverage=False)
     assert admitted == ["g1"] and matches[0]["assignment"] == "argmin"
+
+
+def test_corridor_seed_moves_to_the_centroid_and_office_seed_stays():
+    from panopin.roomseg.shape import SegmentShape
+    scores = {"h": {"corr": 0.08, "off": 0.30}, "o": {"corr": 0.30, "off": 0.06}}
+    poses = _poses({("h", "corr"): [9.0, 20.0, 1.5], ("o", "off"): [1.0, 2.0, 1.4]})
+    shapes = {"corr": SegmentShape((5.0, 20.5), 5.1, 1000), "off": SegmentShape((1.3, 2.2), 1.2, 1000)}
+    matches, _ = build_matches(scores, poses, ["corr", "off"], _ID, shapes=shapes)
+    by = {m["pano_name"]: m for m in matches}
+    assert by["h"]["camera_position"] == [5.0, 20.5]        # centroid, z untouched
+    assert by["h"]["seed_basis"] == "centroid" and by["h"]["extent_ratio"] == 5.1
+    assert by["o"]["camera_position"] == [1.0, 2.0]         # CPO position
+    assert by["o"]["seed_basis"] == "cpo" and by["o"]["extent_ratio"] == 1.2
+
+
+def test_without_shapes_every_seed_is_cpo():
+    scores = {"g1": {"A": 0.06, "B": 0.30}, "g2": {"A": 0.30, "B": 0.07}}
+    poses = _poses({("g1", "A"): [1, 2, 0], ("g2", "B"): [3, 4, 0]})
+    matches, _ = build_matches(scores, poses, ["A", "B"], _ID)
+    assert all(m["seed_basis"] == "cpo" and m["extent_ratio"] is None for m in matches)

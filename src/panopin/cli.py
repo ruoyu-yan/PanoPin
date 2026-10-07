@@ -13,14 +13,28 @@ from pathlib import Path
 from panopin import fgpl_export, seed
 
 
-def seed_from_cached(score_matrix, poses, room_order, metadata_path, out_path, tau=0.10):
+def segment_shapes(candidate_clouds, stride=10):
+    """{room: cloud_path} -> {room: SegmentShape}, from every stride-th point of each cloud.
+    Corridor segments get their FGPL seed at this centroid (fgpl_export.build_matches)."""
+    from panopin.roomseg.files import read_cloud
+    from panopin.roomseg.shape import segment_shape
+    out = {}
+    for room, path in candidate_clouds.items():
+        xyz, _rgb = read_cloud(path)
+        out[room] = segment_shape(xyz[::stride])
+    return out
+
+
+def seed_from_cached(score_matrix, poses, room_order, metadata_path, out_path, tau=0.10,
+                     shapes=None):
     """Build a demo6_alignment.json from an existing score matrix + poses.
 
     poses maps pano -> room -> (t, R). Returns the admitted pano names, which
     the caller MUST use as FGPL's cfg["pano_names"].
     """
     return fgpl_export.export_alignment(
-        score_matrix, poses, list(room_order), str(metadata_path), str(out_path), tau=tau)
+        score_matrix, poses, list(room_order), str(metadata_path), str(out_path), tau=tau,
+        shapes=shapes)
 
 
 def seed_from_clouds(panos, candidate_clouds, metadata_path, out_path, tau=0.10):
@@ -34,10 +48,11 @@ def seed_from_clouds(panos, candidate_clouds, metadata_path, out_path, tau=0.10)
     one seed per ROOM. The full per-(pano, room) score matrix is what build_matches
     needs.
     """
+    shapes = segment_shapes(candidate_clouds)
     score_matrix, poses = seed.localize_and_score(
         panos, candidate_clouds, seed.load_cfg(sample_rate=30))
     return seed_from_cached(score_matrix, poses, list(candidate_clouds),
-                            metadata_path, out_path, tau=tau)
+                            metadata_path, out_path, tau=tau, shapes=shapes)
 
 
 def _segment(args):

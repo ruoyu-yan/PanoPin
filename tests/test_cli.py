@@ -92,3 +92,38 @@ def test_main_routes_args_and_prints_admitted_names_one_per_line(tmp_path, monke
     assert call["out"] == out_path, call["out"]
     assert call["tau"] == 0.25, call["tau"]
     assert isinstance(call["tau"], float), type(call["tau"])
+
+
+def _cloud_txt(path, w, d, cx, cy, n=3000):
+    import numpy as np
+    rng = np.random.default_rng(0)
+    xy = rng.uniform([-w / 2, -d / 2], [w / 2, d / 2], size=(n, 2)) + [cx, cy]
+    rows = np.column_stack([xy, rng.uniform(0, 2.8, n), rng.integers(0, 255, (n, 3))])
+    np.savetxt(path, rows, fmt="%.3f %.3f %.3f %d %d %d")
+    return path
+
+
+def test_segment_shapes_reads_every_candidate_cloud(tmp_path):
+    from panopin import cli
+    clouds = {"corr": str(_cloud_txt(tmp_path / "corr.txt", 10.0, 2.0, 5.0, 20.0)),
+              "off": str(_cloud_txt(tmp_path / "off.txt", 4.0, 4.0, 1.0, 2.0))}
+    shapes = cli.segment_shapes(clouds, stride=1)
+    assert set(shapes) == {"corr", "off"}
+    assert shapes["corr"].extent_ratio > 4 and shapes["off"].extent_ratio < 1.3
+    assert abs(shapes["corr"].centroid_xy[0] - 5.0) < 0.2
+
+
+def test_seed_from_cached_passes_shapes_through(tmp_path):
+    from panopin import cli
+    from panopin.roomseg.shape import SegmentShape
+    scores = {"h": {"corr": 0.08, "off": 0.30}, "o": {"corr": 0.30, "off": 0.06}}
+    poses = {"h": {"corr": ([9.0, 20.0, 1.5], [[1, 0, 0], [0, 1, 0], [0, 0, 1]]),
+                   "off": ([0, 0, 0], [[1, 0, 0], [0, 1, 0], [0, 0, 1]])},
+             "o": {"corr": ([0, 0, 0], [[1, 0, 0], [0, 1, 0], [0, 0, 1]]),
+                   "off": ([1.0, 2.0, 1.4], [[1, 0, 0], [0, 1, 0], [0, 0, 1]])}}
+    meta = _write(tmp_path / "metadata.json", {"rotation_matrix": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]})
+    out = tmp_path / "demo6_alignment.json"
+    shapes = {"corr": SegmentShape((5.0, 20.5), 5.1, 10), "off": SegmentShape((1.3, 2.2), 1.2, 10)}
+    cli.seed_from_cached(scores, poses, ["corr", "off"], meta, out, tau=0.10, shapes=shapes)
+    by = {m["pano_name"]: m for m in json.loads(out.read_text())["matches"]}
+    assert by["h"]["camera_position"] == [5.0, 20.5] and by["h"]["seed_basis"] == "centroid"

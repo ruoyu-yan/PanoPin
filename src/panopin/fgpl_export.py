@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from panopin import coverage
+from panopin.roomseg import shape as shape_mod
 
 
 def raw_t_to_camera_position(t_raw, R_meta, tol=1e-6):
@@ -35,7 +36,8 @@ def raw_t_to_camera_position(t_raw, R_meta, tol=1e-6):
     return [float(cam[0]), float(cam[1])]
 
 
-def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_coverage=True):
+def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_coverage=True,
+                  shapes=None):
     """Joint assignment (panos <= rooms) or the legacy per-pano gate -> (matches, admitted).
 
     Joint (guarantee_coverage=True and len(score_matrix) <= len(room_order), the CLI's usual
@@ -48,6 +50,10 @@ def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_c
     seeded by its best UNASSIGNED pano. Tagged "assignment": "argmin". The joint rule is not
     used here because with several panos per room a one-to-one assignment forces a confident
     pano out of its room into a pano-less segment.
+
+    shapes {room: roomseg.shape.SegmentShape} (optional): a pano whose room is a corridor
+    (is_corridor) is seeded at the room's plan centroid instead of its CPO position; records
+    carry "seed_basis" and "extent_ratio".
 
     Each pano appears at most once. Records are emitted in score-matrix order."""
     if not score_matrix:
@@ -78,6 +84,13 @@ def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_c
             continue
         room = assigned[pano]
         t, _R = poses[pano][room]
+        seed_basis, ratio = "cpo", None
+        if shapes is not None and room in shapes:
+            ratio = float(shapes[room].extent_ratio)
+            if shape_mod.is_corridor(shapes[room]):
+                cx, cy = shapes[room].centroid_xy
+                t = [cx, cy, float(t[2])]
+                seed_basis = "centroid"
         cam = raw_t_to_camera_position(t, R_meta)
         matches.append({
             "pano_name": pano,
@@ -87,6 +100,8 @@ def build_matches(score_matrix, poses, room_order, R_meta, tau=0.10, guarantee_c
             "rotation_deg": 0.0,
             "camera_position": cam,
             "assignment": basis,
+            "seed_basis": seed_basis,
+            "extent_ratio": ratio,
         })
     admitted_pano_names = [m["pano_name"] for m in matches]
     return matches, admitted_pano_names
@@ -106,12 +121,13 @@ def write_alignment_json(matches, admitted_pano_names, out_path, extra_meta=None
 
 
 def export_alignment(score_matrix, poses, room_order, metadata_path, out_path,
-                     tau=0.10, guarantee_coverage=True):
+                     tau=0.10, guarantee_coverage=True, shapes=None):
     """Read metadata.json rotation, build + write demo6_alignment.json, return admitted panos.
     The caller MUST set FGPL cfg["pano_names"] to the returned list."""
     with open(metadata_path) as f:
         R_meta = json.load(f)["rotation_matrix"]
     matches, admitted = build_matches(score_matrix, poses, room_order, R_meta,
-                                      tau=tau, guarantee_coverage=guarantee_coverage)
+                                      tau=tau, guarantee_coverage=guarantee_coverage,
+                                      shapes=shapes)
     write_alignment_json(matches, admitted, out_path, extra_meta={"tau": tau})
     return admitted
