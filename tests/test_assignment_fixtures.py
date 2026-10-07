@@ -41,7 +41,7 @@ def test_known_failing_draws_are_present():
 def test_known_failing_draw_is_still_failing(path):
     """A recorded draw on which the joint assignment misplaces panos, kept as evidence. On it
     both corridor panos score lower in each other's corridor, so the joint min-sum assignment
-    cannot place both corridors: the swap has the lower total (0.1837 vs 0.1935). When a later
+    cannot place both corridors: the swap has the lower total (0.1837 vs 0.1936). When a later
     change makes this test fail, the fixture is placed correctly now and should move back to
     fixtures/score_matrix/."""
     d = json.loads(path.read_text())
