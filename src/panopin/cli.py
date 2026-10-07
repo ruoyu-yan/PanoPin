@@ -80,6 +80,25 @@ def _segment(args):
     return 0
 
 
+def _arbitrate(args):
+    """`arbitrate` subcommand: pick each pano's pose among FGPL's refined candidates by colour
+    residual against the pano's assigned room cloud; write every score beside the winner."""
+    from panopin import arbitrate as arb
+    from panopin.determinism import pin
+    pin()
+    panos = json.loads(args.panos.read_text())
+    clouds = json.loads(args.clouds.read_text())
+    alignment = json.loads(args.alignment.read_text())
+    result = arb.arbitrate(panos, clouds, alignment, args.candidates_dir,
+                           arb.gpu_scorer(seed.load_cfg(sample_rate=30)))
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(result, indent=1))
+    for pano, r in result.items():
+        print(f"{pano}: {r['origin']} #{r['index']} score {r['score']:.4f}  "
+              f"(fgpl #{r['fgpl_choice']['index']} score {r['fgpl_choice']['score']:.4f})")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="panopin.cli", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -105,9 +124,18 @@ def main(argv=None):
     g.add_argument("--baseline-hovsg", action="store_true",
                    help="baseline B1: band [floor + 1.5, ceiling - 0.3] instead of the ceiling band")
 
+    a = sub.add_parser("arbitrate", help="choose each pano's pose among FGPL's candidates by colour residual")
+    a.add_argument("--panos", required=True, type=Path, help="JSON {pano_id: pano_image_path}")
+    a.add_argument("--clouds", required=True, type=Path, help="JSON {room: cloud_path}")
+    a.add_argument("--alignment", required=True, type=Path, help="the demo6_alignment.json the seed wrote")
+    a.add_argument("--candidates-dir", required=True, type=Path, help="FGPL output_dir holding <pano>/candidates.json")
+    a.add_argument("--out", required=True, type=Path, help="output arbitration.json")
+
     args = parser.parse_args(argv)
     if args.command == "segment":
         return _segment(args)
+    if args.command == "arbitrate":
+        return _arbitrate(args)
 
     panos = json.loads(args.panos.read_text())
     clouds = json.loads(args.clouds.read_text())

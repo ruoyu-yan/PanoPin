@@ -136,3 +136,25 @@ def test_segment_shapes_skips_a_segment_too_small_to_measure(tmp_path, capsys):
     shapes = cli.segment_shapes(clouds)
     assert set(shapes) == {"off"}
     assert "tiny" in capsys.readouterr().err
+
+
+def test_arbitrate_subcommand_writes_the_winners(tmp_path, monkeypatch):
+    from panopin import cli, arbitrate as arb
+    _ID = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    panos = _write(tmp_path / "panos.json", {"pA": str(tmp_path / "pA.png")})
+    clouds = _write(tmp_path / "clouds.json", {"r1": str(tmp_path / "r1.txt")})
+    alignment = _write(tmp_path / "demo6_alignment.json",
+                       {"metadata": {}, "matches": [{"pano_name": "pA", "room_label": "r1"}]})
+    cdir = tmp_path / "poses"; (cdir / "pA").mkdir(parents=True)
+    doc = {"pano": "pA", "fgpl_choice": 0, "candidates": [
+        {"index": 0, "origin": "xdf", "rot_idx": 0, "R": _ID, "t": [0, 0, 1.5], "cost": -1.0, "n_matched": 1, "n_tight": 1, "avg_dist": 0.1},
+        {"index": 1, "origin": "seed", "rot_idx": 1, "R": _ID, "t": [5, 0, 1.5], "cost": None, "n_matched": 1, "n_tight": 1, "avg_dist": 0.1}]}
+    (cdir / "pA" / "candidates.json").write_text(json.dumps(doc))
+    monkeypatch.setattr(arb, "gpu_scorer", lambda cfg: (lambda pano, cloud, poses: [0.3, 0.1]))
+    out = tmp_path / "arbitration.json"
+    rc = cli.main(["arbitrate", "--panos", str(panos), "--clouds", str(clouds), "--alignment", str(alignment),
+                   "--candidates-dir", str(cdir), "--out", str(out)])
+    assert rc == 0
+    res = json.loads(out.read_text())
+    assert res["pA"]["index"] == 1 and res["pA"]["origin"] == "seed" and res["pA"]["t"] == [5, 0, 1.5]
+    assert res["pA"]["fgpl_choice"] == {"index": 0, "score": 0.3}
